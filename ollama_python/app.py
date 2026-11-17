@@ -1,3 +1,9 @@
+# cd "/Users/elaw/Documents/GitHub/ollama_Assignment W1_D5/ollama_python"
+# source .venv/bin/activate
+# streamlit run rag_app.py
+
+
+
 
 import streamlit as st
 import ollama
