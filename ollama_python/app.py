@@ -127,9 +127,9 @@ def set_theme(name):
 
 
 def on_theme_pick():
-    picked = st.session_state.theme_pick
+    picked = st.session_state.get("theme_pick")
     if picked is None:  # clicking the selected option again deselects it: undo that
-        st.session_state.theme_pick = st.session_state.theme
+        st.session_state.theme_pick = st.session_state.get("theme", "auto")
     else:
         st.session_state.theme = picked
 
@@ -199,6 +199,19 @@ def thinking_html(text):
     return f'<div class="thinking-text">{body}</div>'
 
 
+def split_think(raw):
+    """Separate Qwen3-style <think>...</think> reasoning from the answer."""
+    stripped = raw.lstrip()
+    if "</think>" in raw:
+        before, after = raw.split("</think>", 1)
+        return before.replace("<think>", "").strip(), after.lstrip()
+    if stripped.startswith("<think>"):
+        return stripped[len("<think>"):], ""        # still reasoning
+    if stripped and "<think>".startswith(stripped):
+        return "", ""                                # tag still arriving
+    return "", raw
+
+
 def build_transcript(messages):
     lines = [f"# {APP_NAME} chat — {datetime.now():%Y-%m-%d %H:%M}\n"]
     for m in messages:
@@ -259,12 +272,15 @@ with st.sidebar:
         help="Lower = focused and predictable. Higher = more creative.",
     )
     can_think = supports_thinking(model)
+    # Older Ollama versions don't expose "thinking", but Qwen3 still obeys its
+    # own /think and /no_think switches, so we drive it through the prompt.
+    soft_think = not can_think and model.lower().startswith("qwen3")
     deep_thinking = st.toggle(
         "Deep thinking",
         value=False,
-        disabled=not can_think,
+        disabled=not (can_think or soft_think),
         help="The model reasons step by step before answering. Smarter on hard "
-        "problems, but much slower." if can_think
+        "problems, but much slower." if (can_think or soft_think)
         else "This model doesn't support thinking mode.",
     )
 
@@ -361,7 +377,10 @@ if prompt:
             {"role": m["role"], "content": m["content"]}
             for m in st.session_state.messages[-MAX_HISTORY_MESSAGES:]
         ]
-        payload = [{"role": "system", "content": PERSONAS[persona]}] + history
+        system_prompt = PERSONAS[persona]
+        if soft_think:
+            system_prompt += "\n/think" if deep_thinking else "\n/no_think"
+        payload = [{"role": "system", "content": system_prompt}] + history
         chat_kwargs = {}
         if can_think:
             chat_kwargs["think"] = deep_thinking  # explicit off keeps qwen3 fast
@@ -379,8 +398,10 @@ if prompt:
         else:
             try:
                 started = time.perf_counter()
-                thinking, answer, stats = "", "", {}
+                native_thinking, raw, stats = "", "", {}
+                thinking = answer = ""
                 think_box = think_slot = None
+                think_box_open = True
                 answer_slot = st.empty()
                 answer_slot.markdown("⏳ _Warming up the model…_")
 
@@ -394,18 +415,22 @@ if prompt:
                 )
                 for chunk in stream:
                     msg = chunk["message"]
-                    if msg.get("thinking"):
-                        if think_box is None:
-                            answer_slot.empty()
-                            think_box = st.status("Thinking…", expanded=True)
-                            think_slot = think_box.empty()
-                            answer_slot = st.empty()
-                        thinking += msg["thinking"]
+                    native_thinking += msg.get("thinking") or ""
+                    raw += msg.get("content") or ""
+                    tag_thinking, answer = split_think(raw)
+                    thinking = (native_thinking + tag_thinking).strip()
+
+                    if thinking and think_box is None:
+                        answer_slot.empty()
+                        think_box = st.status("Thinking…", expanded=True)
+                        think_slot = think_box.empty()
+                        answer_slot = st.empty()
+                    if think_box is not None and not answer:
                         think_slot.markdown(thinking_html(thinking[-1500:]), unsafe_allow_html=True)
-                    if msg.get("content"):
-                        if think_box is not None and not answer:
+                    if answer:
+                        if think_box is not None and think_box_open:
                             think_box.update(label="Reasoning done", state="complete", expanded=False)
-                        answer += msg["content"]
+                            think_box_open = False
                         answer_slot.markdown(safe_md(answer, "assistant") + " ▍")
                     if chunk.get("done"):
                         stats["eval_count"] = chunk.get("eval_count") or 0
