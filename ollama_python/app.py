@@ -420,7 +420,8 @@ if prompt:
                     messages=payload,
                     stream=True,
                     options={"temperature": temperature},
-                    keep_alive=KEEP_ALIVE,
+                    # the occasional thinking model frees its memory sooner
+                    keep_alive="5m" if expects_reasoning else KEEP_ALIVE,
                     **chat_kwargs,
                 )
                 for chunk in stream:

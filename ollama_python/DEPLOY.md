@@ -1,123 +1,83 @@
-# Deploying ELAW AI on Hostinger KVM 2 → llm.elawmaran.tech
+# ELAW AI: live deployment
 
-Server: `srv2091969.hstgr.cloud` (Hostinger KVM 2: 2 vCPU, 8 GB RAM, 100 GB NVMe).
-No extra cost: everything runs on the VPS you already pay for, with open-source software.
+**Live at https://llm.elawmaran.tech** on the Hostinger KVM 2 VPS (`srv2091969.hstgr.cloud`,
+201.18.199.87; 2 vCPU, 7.8 GB RAM, 4 GB swap).
 
-**Model: `qwen3:8b`.** `qwen3:14b` needs ~10–12 GB RAM and won't fit in 8 GB.
-On 2 CPU cores expect roughly 2–4 tokens/sec. If that's too slow, `qwen3:4b` is about twice as fast.
+The server also runs the **travel-crm** Docker stack (`/opt/travel-crm`), which serves
+`ai.elawmaran.tech` and `qa.elawmaran.tech`. ELAW AI plugs into that stack instead of running
+its own web server or Ollama:
 
-## 1. DNS (hPanel)
-
-hPanel → **Domains → elawmaran.tech → DNS / Nameservers** → add:
-
-| Type | Name | Points to | TTL |
-|---|---|---|---|
-| A | `llm` | your VPS IP (hPanel → VPS → Overview) | 3600 |
-
-## 2. Log in and prepare the server
-
-hPanel → VPS → **Browser terminal**, or from your Mac:
-
-```bash
-ssh root@srv2091969.hstgr.cloud
+```
+Internet ──► travel-crm-caddy-1 (ports 80/443, automatic HTTPS)
+               ├─ ai.elawmaran.tech   ──► travel-crm frontend
+               ├─ qa.elawmaran.tech   ──► qa-site
+               └─ llm.elawmaran.tech  ──► elaw-ai:8501   (this app, Docker container)
+                                            │
+                                            ▼
+                                travel-crm-ollama-1 (shared Ollama 0.6.8, http://ollama:11434)
+                                  qwen3:4b-instruct  → normal chat (fast)
+                                  qwen3:4b           → "Deep thinking" (Qwen3-4B-Thinking-2507)
+                                  qwen2.5:3b         → used by travel-crm
 ```
 
-Then:
+| Piece | Where |
+|---|---|
+| Code | `/opt/elaw-ai` (clone of this repo) |
+| Container | `elaw-ai`, network `travel-crm_default`, memory limit 768 MB, restarts automatically |
+| HTTPS / routing | `llm.elawmaran.tech` block in `/opt/travel-crm/Caddyfile` |
+| DNS | A record `llm` → 201.18.199.87 |
+
+## Update the live app after pushing to GitHub
 
 ```bash
-apt update && apt upgrade -y
-apt install -y python3-venv git nginx ufw
-
-# 4 GB swap: a safety net so the 8 GB server never crashes on memory spikes
-fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-
-# Firewall: SSH + web only (Ollama's port 11434 stays private)
-ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+ssh root@201.18.199.87
+cd /opt/elaw-ai && git pull
+cd ollama_python && docker build -t elaw-ai:latest .
+docker rm -f elaw-ai
+docker run -d --name elaw-ai --restart unless-stopped --network travel-crm_default \
+  -e OLLAMA_HOST=http://ollama:11434 \
+  -e DEFAULT_MODEL=qwen3:4b-instruct -e THINKING_MODEL=qwen3:4b \
+  -e ALLOWED_MODELS=qwen3:4b-instruct -e MAX_CONCURRENT=1 \
+  --memory 768m elaw-ai:latest
 ```
 
-If hPanel → VPS → **Firewall** has rules enabled, allow 22, 80 and 443 there too.
+## Settings (environment variables)
 
-## 3. Install Ollama and the model
+| Variable | Live value | Meaning |
+|---|---|---|
+| `OLLAMA_HOST` | `http://ollama:11434` | travel-crm's Ollama on the Docker network |
+| `DEFAULT_MODEL` | `qwen3:4b-instruct` | answers directly, ~10 s for a short reply |
+| `THINKING_MODEL` | `qwen3:4b` | used only when "Deep thinking" is on (~1 min) |
+| `ALLOWED_MODELS` | `qwen3:4b-instruct` | models visitors can pick (hides travel-crm's model) |
+| `MAX_CONCURRENT` | `1` | one answer at a time; others see "You're next in line…" |
+
+## Useful commands
 
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Only keep one model in memory, and keep it loaded between chats
-mkdir -p /etc/systemd/system/ollama.service.d
-cat > /etc/systemd/system/ollama.service.d/override.conf <<'EOF'
-[Service]
-Environment=OLLAMA_MAX_LOADED_MODELS=1
-Environment=OLLAMA_NUM_PARALLEL=1
-Environment=OLLAMA_KEEP_ALIVE=30m
-EOF
-systemctl daemon-reload && systemctl restart ollama
-
-ollama pull qwen3:8b
+docker logs -f elaw-ai                          # app logs
+docker exec travel-crm-ollama-1 ollama ps       # which models are loaded
+free -h                                         # memory
+curl -s -o /dev/null -w "%{http_code}\n" https://llm.elawmaran.tech/_stcore/health
 ```
 
-## 4. Install the app
+## Caddy notes (important)
 
-```bash
-git clone https://github.com/elawmaran/ollama_Assignment-W1_D5.git /opt/elaw-ai
-cd /opt/elaw-ai/ollama_python
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-```
+- The Caddyfile is bind-mounted **read-only** into `travel-crm-caddy-1`. If the file on disk is
+  ever replaced (new inode), the running container keeps reading the old copy until it is
+  restarted. On 2026-11-20 the disk copy was missing the `qa.elawmaran.tech` block; it now
+  matches the live config (travel-crm + qa + llm). Backups: `/opt/travel-crm/Caddyfile.bak-*`.
+- To apply Caddyfile changes without downtime:
 
-## 5. Run it as a service (auto-restarts, survives reboots)
+  ```bash
+  docker cp /opt/travel-crm/Caddyfile travel-crm-caddy-1:/tmp/Caddyfile.new
+  docker exec travel-crm-caddy-1 caddy validate --config /tmp/Caddyfile.new --adapter caddyfile
+  docker exec -w /etc/caddy travel-crm-caddy-1 caddy reload --config /tmp/Caddyfile.new --adapter caddyfile
+  ```
+- If travel-crm's Caddyfile lives in another repo you redeploy from, add the
+  `llm.elawmaran.tech` block there too, or a redeploy will drop it.
 
-```bash
-cat > /etc/systemd/system/elaw-ai.service <<'EOF'
-[Unit]
-Description=ELAW AI (Streamlit)
-After=network.target ollama.service
+## Memory
 
-[Service]
-WorkingDirectory=/opt/elaw-ai/ollama_python
-Environment=DEFAULT_MODEL=qwen3:8b
-Environment=MAX_CONCURRENT=1
-ExecStart=/opt/elaw-ai/ollama_python/.venv/bin/streamlit run app.py --server.address 127.0.0.1 --server.port 8501
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl daemon-reload && systemctl enable --now elaw-ai
-```
-
-## 6. Nginx + free HTTPS
-
-```bash
-cat > /etc/nginx/sites-available/elaw-ai <<'EOF'
-server {
-    server_name llm.elawmaran.tech;
-
-    location / {
-        proxy_pass http://127.0.0.1:8501;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;     # Streamlit needs websockets
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 600s;                    # slow CPU answers
-    }
-}
-EOF
-ln -s /etc/nginx/sites-available/elaw-ai /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
-
-apt install -y certbot python3-certbot-nginx
-certbot --nginx -d llm.elawmaran.tech
-```
-
-Open https://llm.elawmaran.tech.
-
-## Keeping it stable
-
-- **One answer at a time** (`MAX_CONCURRENT=1`). Other visitors see "You're next in line…" instead of the server overloading.
-- **Model stays loaded** for 30 minutes after each chat, so replies start faster.
-- **Inputs are capped** at 4,000 characters, and only the last 20 messages are sent to the model.
-- **Update:** `cd /opt/elaw-ai && git pull && systemctl restart elaw-ai`
-- **Logs:** `journalctl -u elaw-ai -f` and `journalctl -u ollama -f`
-- **Memory check:** `free -h` (the model should use ~6 GB while answering)
+qwen3:4b-instruct stays loaded for 30 minutes after use. The thinking model unloads after
+5 minutes, so travel-crm's qwen2.5:3b normally still fits. If all three are needed at once,
+Ollama unloads the least recently used model, and the 4 GB swap file is a safety net.
