@@ -7,6 +7,7 @@
 #   OLLAMA_HOST     where Ollama listens (default http://127.0.0.1:11434)
 #   DEFAULT_MODEL   model selected on start (default qwen3:8b)
 #   MAX_CONCURRENT  how many answers are generated at once (default 1)
+#   ALLOWED_MODELS  comma-separated models visitors may pick (default: all installed)
 
 import os
 import threading
@@ -24,7 +25,8 @@ import streamlit as st
 APP_NAME = "ELAW AI"
 TAGLINE = "Free, open-source AI on my own server"
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen3:8b")
-MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))  # free CPU server: one at a time
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))
+ALLOWED_MODELS = [m.strip() for m in os.getenv("ALLOWED_MODELS", "").split(",") if m.strip()]  # free CPU server: one at a time
 QUEUE_TIMEOUT_S = 300       # give up waiting in line after 5 minutes
 KEEP_ALIVE = "30m"          # keep the model in memory so replies start faster
 MAX_INPUT_CHARS = 4000      # protect a public server from huge prompts
@@ -163,6 +165,8 @@ def get_models():
     try:
         response = ollama.list()
         names = sorted(m.model for m in response.models)
+        if ALLOWED_MODELS:
+            names = [n for n in names if n in ALLOWED_MODELS]
         return True, names
     except Exception:
         return False, []
