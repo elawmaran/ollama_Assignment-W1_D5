@@ -8,6 +8,8 @@
 #   DEFAULT_MODEL   model selected on start (default qwen3:8b)
 #   MAX_CONCURRENT  how many answers are generated at once (default 1)
 #   ALLOWED_MODELS  comma-separated models visitors may pick (default: all installed)
+#   THINKING_MODEL  model used when "Deep thinking" is on, e.g. qwen3:4b
+#                   (useful when the main model is a fast non-thinking one)
 
 import os
 import threading
@@ -25,8 +27,9 @@ import streamlit as st
 APP_NAME = "ELAW AI"
 TAGLINE = "Free, open-source AI on my own server"
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen3:8b")
-MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))
-ALLOWED_MODELS = [m.strip() for m in os.getenv("ALLOWED_MODELS", "").split(",") if m.strip()]  # free CPU server: one at a time
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))  # free CPU server: one at a time
+ALLOWED_MODELS = [m.strip() for m in os.getenv("ALLOWED_MODELS", "").split(",") if m.strip()]
+THINKING_MODEL = os.getenv("THINKING_MODEL", "").strip()
 QUEUE_TIMEOUT_S = 300       # give up waiting in line after 5 minutes
 KEEP_ALIVE = "30m"          # keep the model in memory so replies start faster
 MAX_INPUT_CHARS = 4000      # protect a public server from huge prompts
@@ -199,12 +202,14 @@ def thinking_html(text):
     return f'<div class="thinking-text">{body}</div>'
 
 
-def split_think(raw):
+def split_think(raw, expects_reasoning=False):
     """Separate Qwen3-style <think>...</think> reasoning from the answer."""
     stripped = raw.lstrip()
     if "</think>" in raw:
         before, after = raw.split("</think>", 1)
         return before.replace("<think>", "").strip(), after.lstrip()
+    if expects_reasoning:                            # no closing tag yet
+        return stripped.replace("<think>", ""), ""
     if stripped.startswith("<think>"):
         return stripped[len("<think>"):], ""        # still reasoning
     if stripped and "<think>".startswith(stripped):
@@ -274,13 +279,15 @@ with st.sidebar:
     can_think = supports_thinking(model)
     # Older Ollama versions don't expose "thinking", but Qwen3 still obeys its
     # own /think and /no_think switches, so we drive it through the prompt.
-    soft_think = not can_think and model.lower().startswith("qwen3")
+    soft_think = (not can_think and not THINKING_MODEL
+                  and model.lower().startswith("qwen3") and "instruct" not in model.lower())
+    thinking_available = can_think or soft_think or bool(THINKING_MODEL)
     deep_thinking = st.toggle(
         "Deep thinking",
         value=False,
-        disabled=not (can_think or soft_think),
+        disabled=not thinking_available,
         help="The model reasons step by step before answering. Smarter on hard "
-        "problems, but much slower." if (can_think or soft_think)
+        "problems, but much slower." if thinking_available
         else "This model doesn't support thinking mode.",
     )
 
@@ -377,6 +384,9 @@ if prompt:
             {"role": m["role"], "content": m["content"]}
             for m in st.session_state.messages[-MAX_HISTORY_MESSAGES:]
         ]
+        run_model = THINKING_MODEL if (deep_thinking and THINKING_MODEL) else model
+        # Thinking-only models put their reasoning first, closing it with </think>
+        expects_reasoning = run_model == THINKING_MODEL and bool(THINKING_MODEL)
         if soft_think:  # Qwen3 reads this switch from the latest user turn
             switch = " /think" if deep_thinking else " /no_think"
             history[-1] = {**history[-1], "content": history[-1]["content"] + switch}
@@ -406,7 +416,7 @@ if prompt:
                 answer_slot.markdown("⏳ _Warming up the model…_")
 
                 stream = ollama.chat(
-                    model=model,
+                    model=run_model,
                     messages=payload,
                     stream=True,
                     options={"temperature": temperature},
@@ -417,7 +427,7 @@ if prompt:
                     msg = chunk["message"]
                     native_thinking += msg.get("thinking") or ""
                     raw += msg.get("content") or ""
-                    tag_thinking, answer = split_think(raw)
+                    tag_thinking, answer = split_think(raw, expects_reasoning)
                     thinking = (native_thinking + tag_thinking).strip()
 
                     if thinking and think_box is None:
@@ -446,7 +456,7 @@ if prompt:
                     "role": "assistant",
                     "content": answer.strip() or "_(no answer)_",
                     "thinking": thinking.strip(),
-                    "meta": {"model": model, "seconds": seconds, "tps": tps},
+                    "meta": {"model": run_model, "seconds": seconds, "tps": tps},
                 })
                 answered = True
             except Exception as error:
