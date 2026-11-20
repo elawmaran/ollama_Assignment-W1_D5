@@ -377,10 +377,10 @@ if prompt:
             {"role": m["role"], "content": m["content"]}
             for m in st.session_state.messages[-MAX_HISTORY_MESSAGES:]
         ]
-        system_prompt = PERSONAS[persona]
-        if soft_think:
-            system_prompt += "\n/think" if deep_thinking else "\n/no_think"
-        payload = [{"role": "system", "content": system_prompt}] + history
+        if soft_think:  # Qwen3 reads this switch from the latest user turn
+            switch = " /think" if deep_thinking else " /no_think"
+            history[-1] = {**history[-1], "content": history[-1]["content"] + switch}
+        payload = [{"role": "system", "content": PERSONAS[persona]}] + history
         chat_kwargs = {}
         if can_think:
             chat_kwargs["think"] = deep_thinking  # explicit off keeps qwen3 fast
