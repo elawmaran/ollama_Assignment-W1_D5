@@ -1,340 +1,439 @@
-# cd "/Users/elaw/Documents/GitHub/ollama_Assignment W1_D5/ollama_python"
-# source .venv/bin/activate
-# streamlit run app.py
+# Run locally:
+#   cd "/Users/elaw/Documents/GitHub/ollama_Assignment W1_D5/ollama_python"
+#   source .venv/bin/activate
+#   streamlit run app.py
+#
+# Environment variables (optional, useful on a server):
+#   OLLAMA_HOST     where Ollama listens (default http://127.0.0.1:11434)
+#   DEFAULT_MODEL   model selected on start (default qwen3:8b)
+#   MAX_CONCURRENT  how many answers are generated at once (default 1)
 
+import os
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
 
+import html
+import re
 
-
-import streamlit as st
 import ollama
+import streamlit as st
 
-MODEL_NAME = "qwen2.5:3b"
+# ---------------- CONFIG ----------------
+APP_NAME = "ELAW AI"
+TAGLINE = "Free, open-source AI on my own server"
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen3:8b")
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))  # free CPU server: one at a time
+QUEUE_TIMEOUT_S = 300       # give up waiting in line after 5 minutes
+KEEP_ALIVE = "30m"          # keep the model in memory so replies start faster
+MAX_INPUT_CHARS = 4000      # protect a public server from huge prompts
+MAX_HISTORY_MESSAGES = 20   # how many past messages are sent to the model
+
+# Shown in the sidebar footer. Fill these in before you share the link.
+AUTHOR_NAME = ""
+AUTHOR_LINK = ""            # e.g. your LinkedIn or GitHub URL
+
+PERSONAS = {
+    "Helpful assistant": "You are a friendly, knowledgeable assistant. "
+    "Answer clearly and use markdown formatting when it helps.",
+    "Code mentor": "You are a patient senior software engineer. Explain code "
+    "step by step, show short runnable examples, and point out pitfalls.",
+    "Writing coach": "You are an expert editor. Help the user write clear, "
+    "professional and engaging text. Offer improved versions.",
+    "Straight to the point": "You are a concise assistant. Answer in as few "
+    "words as possible while staying accurate.",
+}
+
+SUGGESTION_ICONS = [":material/school:", ":material/edit_note:",
+                    ":material/code:", ":material/lightbulb:"]
+SUGGESTIONS = [
+    ("Explain a concept", "Break down how large language models work",
+     "Explain how large language models work, in simple words with an analogy."),
+    ("Write with me", "Draft a LinkedIn post about a project",
+     "Help me write a short, engaging LinkedIn post about a personal AI project I built."),
+    ("Code with me", "Learn a Python concept by example",
+     "Teach me Python decorators with a simple, practical example."),
+    ("Brainstorm", "Five creative AI project ideas",
+     "Give me five creative AI project ideas I could build in a weekend."),
+]
 
 st.set_page_config(
-    page_title="Local AI",
-    page_icon="✳",
+    page_title=f"{APP_NAME} · Free Open-Source AI",
+    page_icon="✦",
     layout="centered",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
-# ---------------- CSS STYLING ----------------
-st.markdown("""
-<style>
-/* Main page */
-.stApp {
-    background: #faf9f6;
-    color: #292722;
+# ---------------- THEME ----------------
+PALETTES = {
+    "light": {
+        "bg": "#f7f6f3", "glow-1": "rgba(124,58,237,0.10)", "glow-2": "rgba(6,182,212,0.08)",
+        "panel": "rgba(255,255,255,0.72)", "panel-solid": "#ffffff", "panel-hover": "#ffffff",
+        "field": "#ffffff", "sidebar": "rgba(242,240,236,0.82)",
+        "border": "rgba(28,25,40,0.08)", "border-strong": "rgba(28,25,40,0.14)",
+        "text": "#1d1d1f", "text-2": "#3a3a3c", "muted": "#6e6e73", "faint": "#a1a1a6",
+        "accent": "#7c3aed", "accent-soft": "rgba(124,58,237,0.10)",
+        "grad-text": "linear-gradient(95deg,#7c3aed 10%,#4f46e5 50%,#0891b2 90%)",
+        "cta": "#1d1d1f", "cta-text": "#ffffff",
+        "bubble-bg": "linear-gradient(135deg,#f1ecff,#e8f6fb)",
+        "bubble-border": "rgba(124,58,237,0.16)", "bubble-text": "#1d1d1f",
+        "code-bg": "rgba(124,58,237,0.08)", "code-text": "#6d28d9", "pre-bg": "#fbfaf8",
+        "track": "rgba(0,0,0,0.10)",
+        "shadow-sm": "0 1px 2px rgba(16,12,32,0.05)",
+        "shadow": "0 1px 2px rgba(16,12,32,0.05), 0 8px 24px rgba(16,12,32,0.07)",
+        "shadow-lg": "0 2px 6px rgba(16,12,32,0.05), 0 20px 50px rgba(16,12,32,0.10)",
+        "notice-bg": "rgba(16,185,129,0.07)", "notice-border": "rgba(16,185,129,0.24)",
+        "notice-strong": "#047857", "green": "#10b981", "red": "#ef4444",
+        "bottom-fade": "rgba(247,246,243,0.96)", "input-bg": "rgba(255,255,255,0.88)",
+    },
+    "dark": {
+        "bg": "#0b0b10", "glow-1": "rgba(139,92,246,0.17)", "glow-2": "rgba(34,211,238,0.09)",
+        "panel": "rgba(255,255,255,0.045)", "panel-solid": "#17171f", "panel-hover": "rgba(255,255,255,0.08)",
+        "field": "rgba(255,255,255,0.05)", "sidebar": "rgba(14,14,20,0.82)",
+        "border": "rgba(255,255,255,0.08)", "border-strong": "rgba(255,255,255,0.15)",
+        "text": "#f5f5f7", "text-2": "#e4e4e7", "muted": "#a1a1aa", "faint": "#71717a",
+        "accent": "#a78bfa", "accent-soft": "rgba(167,139,250,0.15)",
+        "grad-text": "linear-gradient(95deg,#c4b5fd 5%,#a78bfa 40%,#22d3ee 95%)",
+        "cta": "#2a2a35", "cta-text": "#f5f5f7",
+        "bubble-bg": "linear-gradient(135deg,rgba(139,92,246,0.26),rgba(34,211,238,0.13))",
+        "bubble-border": "rgba(167,139,250,0.32)", "bubble-text": "#f5f5f7",
+        "code-bg": "rgba(167,139,250,0.14)", "code-text": "#c4b5fd", "pre-bg": "#111118",
+        "track": "rgba(255,255,255,0.14)",
+        "shadow-sm": "0 1px 2px rgba(0,0,0,0.35)",
+        "shadow": "0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.35)",
+        "shadow-lg": "0 2px 6px rgba(0,0,0,0.3), 0 20px 50px rgba(0,0,0,0.5)",
+        "notice-bg": "rgba(52,211,153,0.07)", "notice-border": "rgba(52,211,153,0.22)",
+        "notice-strong": "#6ee7b7", "green": "#34d399", "red": "#f87171",
+        "bottom-fade": "rgba(11,11,16,0.96)", "input-bg": "rgba(24,24,32,0.88)",
+    },
+}
+THEME_LABELS = {
+    "auto": "Auto",
+    "light": "Light",
+    "dark": "Dark",
 }
 
-header[data-testid="stHeader"] {
-    background: transparent;
-}
 
-.block-container {
-    max-width: 850px;
-    padding-top: 2rem;
-    padding-bottom: 7rem;
-}
+def palette_vars(name):
+    return ":root{" + "".join(f"--{k}:{v};" for k, v in PALETTES[name].items()) + "}"
 
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: #f0eee8;
-    border-right: 1px solid #e5e1d9;
-}
 
-section[data-testid="stSidebar"] .block-container {
-    padding-top: 1.5rem;
-}
+def set_theme(name):
+    st.session_state.theme = name
+    st.session_state.theme_pick = name  # keep the sidebar picker in sync
 
-.brand {
-    font-family: Georgia, serif;
-    font-size: 1.8rem;
-    font-weight: 600;
-    letter-spacing: -1px;
-    color: #292722;
-    margin-bottom: 0.2rem;
-}
 
-.brand-subtitle {
-    color: #827e74;
-    font-size: 0.85rem;
-    margin-bottom: 1.5rem;
-}
+def on_theme_pick():
+    picked = st.session_state.theme_pick
+    if picked is None:  # clicking the selected option again deselects it: undo that
+        st.session_state.theme_pick = st.session_state.theme
+    else:
+        st.session_state.theme = picked
 
-.model-pill {
-    display: inline-block;
-    background: #eeece6;
-    color: #696459;
-    border: 1px solid #e2ded5;
-    border-radius: 20px;
-    padding: 5px 11px;
-    font-size: 0.78rem;
-    margin: 5px 0 18px 0;
-}
 
-/* Main heading */
-.hero {
-    text-align: center;
-    padding: 4.5rem 0 1.5rem 0;
-}
+st.session_state.setdefault("theme", "auto")
+st.session_state.setdefault("theme_pick", st.session_state.theme)
+theme = st.session_state.theme
 
-.hero-symbol {
-    font-size: 2rem;
-    color: #bd7654;
-    margin-bottom: 0.5rem;
-}
+if theme == "auto":  # follow the visitor's device setting
+    theme_css = (
+        palette_vars("light")
+        + "@media (prefers-color-scheme: dark){" + palette_vars("dark") + "}"
+        + "@media (prefers-color-scheme: dark){.st-key-to_dark{display:none}}"
+        + "@media (prefers-color-scheme: light){.st-key-to_light{display:none}}"
+    )
+else:
+    hidden = "to_dark" if theme == "dark" else "to_light"
+    theme_css = palette_vars(theme) + f".st-key-{hidden}{{display:none}}"
 
-.hero h1 {
-    font-family: Georgia, serif;
-    font-weight: 500;
-    font-size: clamp(2rem, 5vw, 2.8rem);
-    letter-spacing: -1.5px;
-    color: #302d27;
-    margin-bottom: 0.5rem;
-}
+STYLE = (Path(__file__).parent / "style.css").read_text()
+st.markdown(f"<style>{STYLE}{theme_css}</style>", unsafe_allow_html=True)
 
-.hero p {
-    color: #827d72;
-    font-size: 1rem;
-}
+# One-click switch, top right. Only the button for the *other* theme is visible.
+with st.container(key="theme_bar", horizontal=True, gap=None):
+    st.button(":material/dark_mode:", key="to_dark", on_click=set_theme, args=("dark",))
+    st.button(":material/light_mode:", key="to_light", on_click=set_theme, args=("light",))
 
-/* Chat messages */
-[data-testid="stChatMessage"] {
-    background: transparent;
-    border: none;
-    padding: 1rem 0.2rem;
-}
 
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
-    color: #302e29;
-    line-height: 1.8;
-    font-size: 1rem;
-}
+# ---------------- HELPERS ----------------
+@st.cache_data(ttl=30, show_spinner=False)
+def get_models():
+    """Return (is_online, list_of_installed_model_names)."""
+    try:
+        response = ollama.list()
+        names = sorted(m.model for m in response.models)
+        return True, names
+    except Exception:
+        return False, []
 
-[data-testid="stChatMessage"] img {
-    border-radius: 50%;
-}
 
-/* Input box */
-[data-testid="stChatInput"] {
-    border: 1px solid #ded9cf;
-    border-radius: 18px;
-    background: #ffffff;
-    box-shadow: 0 5px 22px rgba(55, 45, 30, 0.06);
-}
+@st.cache_data(ttl=300, show_spinner=False)
+def supports_thinking(model_name):
+    try:
+        return "thinking" in (ollama.show(model_name).capabilities or [])
+    except Exception:
+        return False
 
-[data-testid="stChatInput"] textarea {
-    color: #302d27;
-}
 
-[data-testid="stChatInput"] textarea::placeholder {
-    color: #969084;
-}
+@st.cache_resource
+def generation_slots():
+    """Shared by every visitor: limits how many answers run at the same time."""
+    return threading.Semaphore(MAX_CONCURRENT)
 
-[data-testid="stChatInput"] button {
-    background: #bd7654;
-    color: white;
-    border-radius: 12px;
-}
 
-/* Buttons */
-.stButton > button {
-    border-radius: 10px;
-    border: 1px solid #ded9cf;
-    transition: all 0.2s ease;
-}
+def safe_md(text, role):
+    """Stop prices like $1.10 from being rendered as LaTeX math."""
+    if role == "user":
+        return text.replace("$", "\\$")
+    return re.sub(r"(?<![\\$])\$(?=\d)", r"\\$", text)
 
-.stButton > button:hover {
-    border-color: #bd7654;
-    color: #9f5e40;
-}
 
-/* Suggestion cards */
-div[data-testid="stHorizontalBlock"] .stButton > button {
-    min-height: 72px;
-    text-align: left;
-    white-space: normal;
-    background: rgba(255,255,255,0.65);
-}
+def thinking_html(text):
+    """Plain-text reasoning as one HTML block (no markdown or math parsing)."""
+    body = html.escape(text).replace("$", "&#36;").replace("\n", "<br>")
+    return f'<div class="thinking-text">{body}</div>'
 
-/* Status text */
-.status-note {
-    font-size: 0.78rem;
-    color: #918b7e;
-    text-align: center;
-    padding-top: 0.7rem;
-}
 
-footer {
-    visibility: hidden;
-}
+def build_transcript(messages):
+    lines = [f"# {APP_NAME} chat — {datetime.now():%Y-%m-%d %H:%M}\n"]
+    for m in messages:
+        who = "You" if m["role"] == "user" else APP_NAME
+        lines.append(f"**{who}:**\n\n{m['content']}\n")
+    return "\n".join(lines)
 
-#MainMenu {
-    visibility: hidden;
-}
-</style>
-""", unsafe_allow_html=True)
+
+def meta_html(meta):
+    if not meta:
+        return ""
+    parts = [f"<span>{meta['model']}</span>", f"<span>{meta['seconds']:.1f}s total</span>"]
+    if meta.get("tps"):
+        parts.append(f"<span>{meta['tps']:.0f} tok/s</span>")
+    return f'<div class="meta">{"".join(parts)}</div>'
 
 
 # ---------------- SESSION STATE ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+st.session_state.setdefault("messages", [])
 
-if "chat_started" not in st.session_state:
-    st.session_state.chat_started = False
+online, models = get_models()
+if not models:
+    models = [DEFAULT_MODEL]
+default_index = models.index(DEFAULT_MODEL) if DEFAULT_MODEL in models else 0
 
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.markdown('<div class="brand">✳ Local AI</div>',
-                unsafe_allow_html=True)
-    st.markdown(
-        '<div class="brand-subtitle">Your personal AI workspace</div>',
-        unsafe_allow_html=True
-    )
-
-    if st.button("＋  New conversation", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.chat_started = False
-        st.rerun()
-
-    st.divider()
-
-    st.markdown("**Your model**")
-    st.markdown(
-        f'<div class="model-pill">● {MODEL_NAME}</div>',
-        unsafe_allow_html=True
-    )
-
-    st.caption("Runs locally through Ollama.")
-    st.divider()
-
-    st.markdown("**About this app**")
-    st.caption(
-        "A private, local chat interface powered by "
-        "your own AI model. Your prompts are sent to "
-        "your local Ollama service."
-    )
-
-    st.divider()
-    st.caption("LOCAL AI · PERSONAL WORKSPACE")
-
-
-# ---------------- MAIN CHAT ----------------
-if not st.session_state.messages:
-    st.markdown("""
-    <div class="hero">
-        <div class="hero-symbol">✳</div>
-        <h1>What can I help you with?</h1>
-        <p>Your ideas, questions and work — start anywhere.</p>
-    </div>
+    st.markdown(f"""
+        <div class="brand">
+            <div class="brand-logo">✦</div>
+            <div class="brand-name">ELAW <em>AI</em></div>
+        </div>
+        <div class="brand-sub">{TAGLINE}</div>
     """, unsafe_allow_html=True)
 
+    if st.button("New chat", key="new_chat", icon=":material/add:", width="stretch"):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown('<div class="section-label">Appearance</div>', unsafe_allow_html=True)
+    st.segmented_control(
+        "Theme", list(THEME_LABELS), key="theme_pick", on_change=on_theme_pick,
+        format_func=THEME_LABELS.get, label_visibility="collapsed", width="stretch",
+    )
+
+    st.markdown('<div class="section-label">Engine</div>', unsafe_allow_html=True)
+    status_class, status_text = ("online", "Ollama connected") if online else ("offline", "Ollama offline")
+    st.markdown(
+        f'<div class="status {status_class}"><span class="dot"></span>{status_text}</div>',
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    model = st.selectbox("Model", models, index=default_index)
+    persona = st.selectbox("Personality", list(PERSONAS.keys()))
+    temperature = st.slider(
+        "Creativity", 0.0, 1.5, 0.7, 0.1,
+        help="Lower = focused and predictable. Higher = more creative.",
+    )
+    can_think = supports_thinking(model)
+    deep_thinking = st.toggle(
+        "Deep thinking",
+        value=False,
+        disabled=not can_think,
+        help="The model reasons step by step before answering. Smarter on hard "
+        "problems, but much slower." if can_think
+        else "This model doesn't support thinking mode.",
+    )
+
+    st.markdown('<div class="section-label">This session</div>', unsafe_allow_html=True)
+    msgs = st.session_state.messages
+    user_turns = sum(1 for m in msgs if m["role"] == "user")
+    speeds = [m["meta"]["tps"] for m in msgs if m.get("meta", {}).get("tps")]
+    avg_speed = f"{sum(speeds) / len(speeds):.0f}" if speeds else "—"
+    st.markdown(f"""
+        <div class="stat-grid">
+            <div class="stat"><div class="v">{user_turns}</div><div class="k">Prompts</div></div>
+            <div class="stat"><div class="v">{avg_speed}</div><div class="k">Avg tok/s</div></div>
+        </div>
+    """, unsafe_allow_html=True)
     st.write("")
 
-    # Suggested prompts
-    col1, col2 = st.columns(2)
+    if msgs:
+        st.download_button(
+            "Export chat",
+            data=build_transcript(msgs),
+            file_name=f"{APP_NAME.lower()}-chat-{datetime.now():%Y%m%d-%H%M}.md",
+            mime="text/markdown",
+            icon=":material/download:",
+            width="stretch",
+        )
 
-    with col1:
-        if st.button(
-            "✦  Learn something new\n\nExplain a complex topic simply",
-            use_container_width=True,
-        ):
-            st.session_state.pending_prompt = (
-                "Explain artificial intelligence in simple words."
-            )
-            st.rerun()
-
-        if st.button(
-            "⌘  Write and create\n\nHelp me write something",
-            use_container_width=True,
-        ):
-            st.session_state.pending_prompt = (
-                "Help me write a clear and professional message."
-            )
-            st.rerun()
-
-    with col2:
-        if st.button(
-            "⌘  Code with me\n\nUnderstand or debug Python",
-            use_container_width=True,
-        ):
-            st.session_state.pending_prompt = (
-                "Teach me a useful Python programming concept "
-                "with a simple example."
-            )
-            st.rerun()
-
-        if st.button(
-            "✧  Brainstorm ideas\n\nExplore creative possibilities",
-            use_container_width=True,
-        ):
-            st.session_state.pending_prompt = (
-                "Give me five creative AI project ideas."
-            )
-            st.rerun()
+    credit = ""
+    if AUTHOR_NAME:
+        name = f'<a href="{AUTHOR_LINK}" target="_blank">{AUTHOR_NAME}</a>' if AUTHOR_LINK else AUTHOR_NAME
+        credit = f"Built by {name}<br>"
+    st.markdown(
+        f'<div class="side-footer">{credit}Open-source model · Ollama · Streamlit<br>'
+        'No paid APIs. Conversations are not stored.</div>',
+        unsafe_allow_html=True,
+    )
 
 
-# Render previous messages
+# ---------------- EMPTY STATE ----------------
+if not st.session_state.messages:
+    st.markdown(f"""
+        <div class="hero">
+            <div class="orb">✦</div>
+            <h1>My own AI.<br><span class="serif">Free and open.</span></h1>
+            <p class="lead">Open-source AI on my own server. No subscriptions, no paid APIs.</p>
+            <div class="chips">
+                <span class="chip"><i>●</i> 100% free</span>
+                <span class="chip"><i>◆</i> Open-source model</span>
+                <span class="chip"><i>■</i> Chats aren't stored</span>
+                <span class="chip"><i>✦</i> {model}</span>
+            </div>
+            <div class="notice">
+                <span>🐢</span>
+                <span><b>Slow by design, free forever.</b> This runs on a free CPU server,
+                not paid GPUs, so answers take a little longer and visitors are served
+                one at a time. Thanks for your patience!</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    grid = st.container(key="suggest_grid", horizontal=True, gap="small")
+    for i, (title, subtitle, prompt_text) in enumerate(SUGGESTIONS):
+        with grid:
+            if st.button(f"{title}\n\n{subtitle}", key=f"suggest_{i}", width="stretch",
+                         icon=SUGGESTION_ICONS[i]):
+                st.session_state.pending_prompt = prompt_text
+                st.rerun()
+
+
+# ---------------- HISTORY ----------------
+AVATARS = {"user": ":material/person:", "assistant": ":material/auto_awesome:"}
+
 for message in st.session_state.messages:
-    avatar = "✳" if message["role"] == "assistant" else "👤"
+    with st.chat_message(message["role"], avatar=AVATARS[message["role"]]):
+        if message.get("thinking"):
+            with st.expander("💭 Show reasoning"):
+                st.markdown(thinking_html(message["thinking"]), unsafe_allow_html=True)
+        st.markdown(safe_md(message["content"], message["role"]))
+        if message["role"] == "assistant":
+            st.markdown(meta_html(message.get("meta")), unsafe_allow_html=True)
 
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
 
-
-# Accept either typed messages or suggestion buttons
-prompt = st.chat_input("Message your local AI...")
-
+# ---------------- INPUT ----------------
+prompt = st.chat_input(f"Message {APP_NAME}…", max_chars=MAX_INPUT_CHARS)
 if "pending_prompt" in st.session_state:
     prompt = st.session_state.pop("pending_prompt")
 
-
 if prompt:
-    st.session_state.chat_started = True
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user", avatar=AVATARS["user"]):
+        st.markdown(safe_md(prompt, "user"))
 
-    st.session_state.messages.append({
-        "role": "user",
-        "content": prompt,
-    })
+    with st.chat_message("assistant", avatar=AVATARS["assistant"]):
+        history = [
+            {"role": m["role"], "content": m["content"]}
+            for m in st.session_state.messages[-MAX_HISTORY_MESSAGES:]
+        ]
+        payload = [{"role": "system", "content": PERSONAS[persona]}] + history
+        chat_kwargs = {}
+        if can_think:
+            chat_kwargs["think"] = deep_thinking  # explicit off keeps qwen3 fast
 
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(prompt)
+        answered = False
+        slots = generation_slots()
+        acquired = slots.acquire(blocking=False)
+        if not acquired:
+            with st.spinner("Someone else is chatting with the free server. You're next in line…"):
+                acquired = slots.acquire(timeout=QUEUE_TIMEOUT_S)
 
-    with st.chat_message("assistant", avatar="✳"):
-        try:
-            def generate_response():
+        if not acquired:
+            st.session_state.messages.pop()
+            st.warning("The free server is busy right now. Please try again in a minute.")
+        else:
+            try:
+                started = time.perf_counter()
+                thinking, answer, stats = "", "", {}
+                think_box = think_slot = None
+                answer_slot = st.empty()
+                answer_slot.markdown("⏳ _Warming up the model…_")
+
                 stream = ollama.chat(
-                    model=MODEL_NAME,
-                    messages=st.session_state.messages,
+                    model=model,
+                    messages=payload,
                     stream=True,
+                    options={"temperature": temperature},
+                    keep_alive=KEEP_ALIVE,
+                    **chat_kwargs,
                 )
-
                 for chunk in stream:
-                    content = chunk["message"]["content"]
-                    if content:
-                        yield content
+                    msg = chunk["message"]
+                    if msg.get("thinking"):
+                        if think_box is None:
+                            answer_slot.empty()
+                            think_box = st.status("Thinking…", expanded=True)
+                            think_slot = think_box.empty()
+                            answer_slot = st.empty()
+                        thinking += msg["thinking"]
+                        think_slot.markdown(thinking_html(thinking[-1500:]), unsafe_allow_html=True)
+                    if msg.get("content"):
+                        if think_box is not None and not answer:
+                            think_box.update(label="Reasoning done", state="complete", expanded=False)
+                        answer += msg["content"]
+                        answer_slot.markdown(safe_md(answer, "assistant") + " ▍")
+                    if chunk.get("done"):
+                        stats["eval_count"] = chunk.get("eval_count") or 0
+                        stats["eval_duration"] = chunk.get("eval_duration") or 0
 
-            answer = st.write_stream(generate_response())
+                answer_slot.markdown(safe_md(answer, "assistant"))
+                seconds = time.perf_counter() - started
+                tps = None
+                if stats.get("eval_duration"):
+                    tps = stats["eval_count"] / (stats["eval_duration"] / 1e9)
 
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": answer,
-            })
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer.strip() or "_(no answer)_",
+                    "thinking": thinking.strip(),
+                    "meta": {"model": model, "seconds": seconds, "tps": tps},
+                })
+                answered = True
+            except Exception as error:
+                st.session_state.messages.pop()  # drop the unanswered prompt
+                st.error(f"Couldn't reach the model: {error}")
+                st.caption(
+                    f"Make sure Ollama is running and `{model}` appears in `ollama list`."
+                )
+            finally:
+                slots.release()
 
-        except Exception as error:
-            st.error(f"Could not connect to Ollama: {error}")
-            st.info(
-                "Check that Ollama is running and that "
-                "qwen2.5:3b appears in `ollama list`."
-            )
+        if answered:
+            st.rerun()
 
-    st.rerun()
-
-
-st.markdown(
-    '<div class="status-note">'
-    'Local model · Responses may take time depending on the prompt'
-    '</div>',
-    unsafe_allow_html=True,
-)
+if st.session_state.messages:
+    st.markdown(
+        '<div class="footnote">Free open-source AI · it can make mistakes, so double-check important info.</div>',
+        unsafe_allow_html=True,
+    )
