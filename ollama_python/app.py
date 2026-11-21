@@ -48,8 +48,10 @@ AUTHOR_LINK = ""            # e.g. your LinkedIn or GitHub URL
 
 STYLE_HINT = (" Keep answers focused: lead with the answer, use short paragraphs or "
               "bullets, and stay under about 250 words unless the user asks for more.")
-THINK_PROMPT = (" Before answering, reason step by step inside <think> and </think> tags. "
-                "After </think>, give only the final, polished answer.")
+# Appended to the user's message. Plain <reasoning> tags, because instruct-only
+# Qwen3 models treat <think> as a reserved token and garble it.
+THINK_PROMPT = ("\n\n(First reason step by step inside <reasoning> and </reasoning> tags. "
+                "Then, after </reasoning>, write only the final answer.)")
 
 PERSONAS = {
     "Helpful assistant": "You are a friendly, knowledgeable assistant. "
@@ -244,17 +246,18 @@ def thinking_html(text):
 
 
 def split_think(raw, expects_reasoning=False):
-    """Separate Qwen3-style <think>...</think> reasoning from the answer."""
+    """Separate <think>...</think> or <reasoning>...</reasoning> from the answer."""
     stripped = raw.lstrip()
-    if "</think>" in raw:
-        before, after = raw.split("</think>", 1)
-        return before.replace("<think>", "").strip(), after.lstrip()
-    if expects_reasoning:                            # no closing tag yet
-        return stripped.replace("<think>", ""), ""
-    if stripped.startswith("<think>"):
-        return stripped[len("<think>"):], ""        # still reasoning
-    if stripped and "<think>".startswith(stripped):
-        return "", ""                                # tag still arriving
+    for open_tag, close_tag in (("<think>", "</think>"), ("<reasoning>", "</reasoning>")):
+        if close_tag in raw:
+            before, after = raw.split(close_tag, 1)
+            return before.replace(open_tag, "").strip(), after.lstrip()
+        if stripped.startswith(open_tag):
+            return stripped[len(open_tag):], ""     # still reasoning
+        if stripped and open_tag.startswith(stripped):
+            return "", ""                            # tag still arriving
+    if expects_reasoning:                            # thinking model, no closing tag yet
+        return stripped, ""
     return "", raw
 
 
@@ -432,10 +435,9 @@ if prompt:
         if soft_think:  # Qwen3 reads this switch from the latest user turn
             switch = " /think" if deep_thinking else " /no_think"
             history[-1] = {**history[-1], "content": history[-1]["content"] + switch}
-        system_prompt = PERSONAS[persona] + STYLE_HINT
         if deep_thinking and prompt_think:
-            system_prompt += THINK_PROMPT
-        payload = [{"role": "system", "content": system_prompt}] + history
+            history[-1] = {**history[-1], "content": history[-1]["content"] + THINK_PROMPT}
+        payload = [{"role": "system", "content": PERSONAS[persona] + STYLE_HINT}] + history
         chat_kwargs = {}
         if can_think:
             chat_kwargs["think"] = deep_thinking  # explicit off keeps qwen3 fast
