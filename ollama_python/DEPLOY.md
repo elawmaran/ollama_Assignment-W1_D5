@@ -15,8 +15,7 @@ Internet ──► travel-crm-caddy-1 (ports 80/443, automatic HTTPS)
                                             │
                                             ▼
                                 travel-crm-ollama-1 (shared Ollama 0.6.8, http://ollama:11434)
-                                  qwen3:4b-instruct  → normal chat (fast)
-                                  qwen3:4b           → "Deep thinking" (Qwen3-4B-Thinking-2507)
+                                  qwen3:4b-instruct  → ELAW AI, always loaded (normal + Deep thinking)
                                   qwen2.5:3b         → used by travel-crm
 ```
 
@@ -36,7 +35,7 @@ cd ollama_python && docker build -t elaw-ai:latest .
 docker rm -f elaw-ai
 docker run -d --name elaw-ai --restart unless-stopped --network travel-crm_default \
   -e OLLAMA_HOST=http://ollama:11434 \
-  -e DEFAULT_MODEL=qwen3:4b-instruct -e THINKING_MODEL=qwen3:4b \
+  -e DEFAULT_MODEL=qwen3:4b-instruct \
   -e ALLOWED_MODELS=qwen3:4b-instruct -e MAX_CONCURRENT=1 \
   --memory 768m elaw-ai:latest
 ```
@@ -46,8 +45,10 @@ docker run -d --name elaw-ai --restart unless-stopped --network travel-crm_defau
 | Variable | Live value | Meaning |
 |---|---|---|
 | `OLLAMA_HOST` | `http://ollama:11434` | travel-crm's Ollama on the Docker network |
-| `DEFAULT_MODEL` | `qwen3:4b-instruct` | answers directly, ~10 s for a short reply |
-| `THINKING_MODEL` | `qwen3:4b` | used only when "Deep thinking" is on (~1 min) |
+| `DEFAULT_MODEL` | `qwen3:4b-instruct` | first words in ~2–5 s, ~11 tok/s |
+| `THINKING_MODEL` | *(unset)* | Deep thinking uses the same model via `<reasoning>` tags, so no second model competes for RAM |
+| `KEEP_ALIVE` | `-1` (default) | model stays in memory forever; `warm.py` loads it when the container starts |
+| `MAX_ANSWER_TOKENS` | `700` (default) | caps answer length so CPU replies stay quick |
 | `ALLOWED_MODELS` | `qwen3:4b-instruct` | models visitors can pick (hides travel-crm's model) |
 | `MAX_CONCURRENT` | `1` | one answer at a time; others see "You're next in line…" |
 
@@ -76,8 +77,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://llm.elawmaran.tech/_stcore/heal
 - If travel-crm's Caddyfile lives in another repo you redeploy from, add the
   `llm.elawmaran.tech` block there too, or a redeploy will drop it.
 
-## Memory
+## Speed and memory
 
-qwen3:4b-instruct stays loaded for 30 minutes after use. The thinking model unloads after
-5 minutes, so travel-crm's qwen2.5:3b normally still fits. If all three are needed at once,
-Ollama unloads the least recently used model, and the 4 GB swap file is a safety net.
+Measured 2026-11-21: a **cold** model load takes ~75 s on this server, while a **loaded** model
+starts answering in ~0.2 s. So ELAW AI's model is kept in memory permanently (`ollama ps` shows
+`Forever`). qwen3:4b-instruct (3.6 GB) and travel-crm's qwen2.5:3b (2.4 GB) fit together.
+Don't add a second ELAW model: loading it pushes the others out and causes the slow reloads.
+A bigger model (e.g. 8B) would run at about half the speed on 2 vCPUs.
