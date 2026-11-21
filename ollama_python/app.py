@@ -8,8 +8,11 @@
 #   DEFAULT_MODEL   model selected on start (default qwen3:8b)
 #   MAX_CONCURRENT  how many answers are generated at once (default 1)
 #   ALLOWED_MODELS  comma-separated models visitors may pick (default: all installed)
-#   THINKING_MODEL  model used when "Deep thinking" is on, e.g. qwen3:4b
-#                   (useful when the main model is a fast non-thinking one)
+#   THINKING_MODEL  optional separate model for "Deep thinking". If unset and the
+#                   model has no native thinking, the same model is prompted to
+#                   reason step by step instead (no extra RAM).
+#   KEEP_ALIVE      how long Ollama keeps the model in memory (default -1 = always)
+#   MAX_ANSWER_TOKENS  cap on answer length, keeps CPU replies quick (default 700)
 
 import os
 import threading
@@ -31,13 +34,22 @@ MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "1"))  # free CPU server: one a
 ALLOWED_MODELS = [m.strip() for m in os.getenv("ALLOWED_MODELS", "").split(",") if m.strip()]
 THINKING_MODEL = os.getenv("THINKING_MODEL", "").strip()
 QUEUE_TIMEOUT_S = 300       # give up waiting in line after 5 minutes
-KEEP_ALIVE = "30m"          # keep the model in memory so replies start faster
+# Keep the model in memory permanently: on a small CPU server a cold load takes
+# over a minute, while a loaded model starts answering in a fraction of a second.
+_keep = os.getenv("KEEP_ALIVE", "-1").strip()
+KEEP_ALIVE = int(_keep) if _keep.lstrip("-").isdigit() else _keep
+MAX_ANSWER_TOKENS = int(os.getenv("MAX_ANSWER_TOKENS", "700"))
 MAX_INPUT_CHARS = 4000      # protect a public server from huge prompts
 MAX_HISTORY_MESSAGES = 20   # how many past messages are sent to the model
 
 # Shown in the sidebar footer. Fill these in before you share the link.
 AUTHOR_NAME = ""
 AUTHOR_LINK = ""            # e.g. your LinkedIn or GitHub URL
+
+STYLE_HINT = (" Keep answers focused: lead with the answer, use short paragraphs or "
+              "bullets, and stay under about 250 words unless the user asks for more.")
+THINK_PROMPT = (" Before answering, reason step by step inside <think> and </think> tags. "
+                "After </think>, give only the final, polished answer.")
 
 PERSONAS = {
     "Helpful assistant": "You are a friendly, knowledgeable assistant. "
@@ -183,6 +195,35 @@ def supports_thinking(model_name):
         return False
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def is_loaded(model_name):
+    try:
+        return any(m.model == model_name for m in ollama.ps().models)
+    except Exception:
+        return True  # can't tell; don't alarm visitors
+
+
+@st.cache_resource
+def _warmers():
+    return {}
+
+
+def warm_up(model_name):
+    """Load the model into memory in the background (at most once a minute)."""
+    warmers = _warmers()
+    if time.time() - warmers.get(model_name, 0) < 60:
+        return
+    warmers[model_name] = time.time()
+
+    def _load():
+        try:
+            ollama.generate(model=model_name, prompt="", keep_alive=KEEP_ALIVE)
+        except Exception:
+            pass
+
+    threading.Thread(target=_load, daemon=True).start()
+
+
 @st.cache_resource
 def generation_slots():
     """Shared by every visitor: limits how many answers run at the same time."""
@@ -236,6 +277,7 @@ def meta_html(meta):
 
 # ---------------- SESSION STATE ----------------
 st.session_state.setdefault("messages", [])
+warm_up(DEFAULT_MODEL)  # make sure the main model is in memory before anyone asks
 
 online, models = get_models()
 if not models:
@@ -281,14 +323,14 @@ with st.sidebar:
     # own /think and /no_think switches, so we drive it through the prompt.
     soft_think = (not can_think and not THINKING_MODEL
                   and model.lower().startswith("qwen3") and "instruct" not in model.lower())
-    thinking_available = can_think or soft_think or bool(THINKING_MODEL)
+    # Otherwise ask the same model to reason inside <think> tags: no extra model,
+    # so nothing else gets pushed out of memory.
+    prompt_think = not (can_think or soft_think or THINKING_MODEL)
     deep_thinking = st.toggle(
         "Deep thinking",
         value=False,
-        disabled=not thinking_available,
-        help="The model reasons step by step before answering. Smarter on hard "
-        "problems, but much slower." if thinking_available
-        else "This model doesn't support thinking mode.",
+        help="The model reasons step by step before answering. Better on tricky "
+        "questions, but slower.",
     )
 
     st.markdown('<div class="section-label">This session</div>', unsafe_allow_html=True)
@@ -390,7 +432,10 @@ if prompt:
         if soft_think:  # Qwen3 reads this switch from the latest user turn
             switch = " /think" if deep_thinking else " /no_think"
             history[-1] = {**history[-1], "content": history[-1]["content"] + switch}
-        payload = [{"role": "system", "content": PERSONAS[persona]}] + history
+        system_prompt = PERSONAS[persona] + STYLE_HINT
+        if deep_thinking and prompt_think:
+            system_prompt += THINK_PROMPT
+        payload = [{"role": "system", "content": system_prompt}] + history
         chat_kwargs = {}
         if can_think:
             chat_kwargs["think"] = deep_thinking  # explicit off keeps qwen3 fast
@@ -413,14 +458,21 @@ if prompt:
                 think_box = think_slot = None
                 think_box_open = True
                 answer_slot = st.empty()
-                answer_slot.markdown("⏳ _Warming up the model…_")
+                if is_loaded(run_model):
+                    answer_slot.markdown("⏳ _Thinking…_")
+                else:
+                    answer_slot.markdown("⏳ _Waking up the AI. The first answer after a "
+                                         "quiet spell takes about a minute…_")
 
                 stream = ollama.chat(
                     model=run_model,
                     messages=payload,
                     stream=True,
-                    options={"temperature": temperature},
-                    # the occasional thinking model frees its memory sooner
+                    options={
+                        "temperature": temperature,
+                        "num_predict": MAX_ANSWER_TOKENS * (2 if deep_thinking else 1),
+                    },
+                    # a separate thinking model frees its memory sooner
                     keep_alive="5m" if expects_reasoning else KEEP_ALIVE,
                     **chat_kwargs,
                 )
