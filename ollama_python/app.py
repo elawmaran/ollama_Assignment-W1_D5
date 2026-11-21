@@ -372,7 +372,7 @@ if not st.session_state.messages:
     st.markdown(f"""
         <div class="hero">
             <div class="orb">✦</div>
-            <h1>My own AI.<br><span class="serif">Free and open.</span></h1>
+            <h1>ELAW AI.<br><span class="serif">Free and open.</span></h1>
             <p class="lead">Open-source AI on my own server. No subscriptions, no paid APIs.</p>
             <div class="chips">
                 <span class="chip"><i>●</i> 100% free</span>
