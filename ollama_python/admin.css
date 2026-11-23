@@ -1,0 +1,98 @@
+/* ELAW AI admin dashboard. Uses the colour tokens from ui_theme (light + dark). */
+.block-container { max-width: 1240px !important; padding-top: 2.2rem !important; }
+
+/* ---------- page header ---------- */
+.adm-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin: 0 0 18px; }
+.adm-head h1 { font-size: 1.75rem !important; font-weight: 700 !important; margin: 0 !important;
+  padding: 0 !important; color: var(--text); letter-spacing: -0.02em; }
+.adm-head p { margin: 4px 0 0; color: var(--muted); font-size: 0.95rem; }
+.adm-section { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--faint); margin: 26px 0 10px; }
+
+/* ---------- KPI cards ---------- */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+@media (max-width: 640px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; }
+  .kpi-value { font-size: 1.45rem; }
+}
+.kpi { background: var(--panel-solid); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px 18px; box-shadow: var(--shadow-sm); display: flex; gap: 14px; align-items: center; }
+.kpi-icon { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  font-family: 'Material Symbols Rounded'; font-size: 22px; background: var(--accent-soft); color: var(--accent); }
+.kpi.good .kpi-icon { background: rgba(16,185,129,.12); color: var(--green); }
+.kpi.warn .kpi-icon { background: rgba(239,68,68,.10); color: var(--red); }
+.kpi.info .kpi-icon { background: rgba(8,145,178,.12); color: #0891b2; }
+.kpi-label { font-size: 13px; color: var(--muted); line-height: 1.3; }
+.kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.15; letter-spacing: -0.02em; }
+.kpi-hint { font-size: 12px; color: var(--faint); margin-top: 2px; }
+
+/* ---------- panels (bordered st.container) ---------- */
+.panel-title { font-weight: 650; color: var(--text); font-size: 15px; margin: 2px 0 0; line-height: 1.3; }
+.panel-sub { color: var(--muted); font-size: 13px; margin: 2px 0 10px; line-height: 1.3; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  height: 200px; color: var(--muted); font-size: 14px; text-align: center;
+  border: 1px dashed var(--border-strong); border-radius: 12px; }
+.empty b { font-family: 'Material Symbols Rounded'; font-weight: 400; font-size: 30px; color: var(--faint); }
+
+/* ---------- lists (recent sign-ups / activity) ---------- */
+.rows { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: 0; }
+.avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 12.5px; color: #fff; background: linear-gradient(135deg,#7c3aed,#0891b2); }
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-time { flex: none; font-size: 12px; color: var(--faint); }
+
+/* ---------- badges ---------- */
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-green { background: rgba(16,185,129,.12); color: #047857; }
+.b-amber { background: rgba(245,158,11,.14); color: #b45309; }
+.b-red { background: rgba(239,68,68,.11); color: #b91c1c; }
+.b-gray { background: rgba(120,120,130,.14); color: var(--muted); }
+.b-violet { background: var(--accent-soft); color: var(--accent); }
+.b-blue { background: rgba(8,145,178,.12); color: #0e7490; }
+
+/* ---------- customer profile header ---------- */
+.profile { display: flex; align-items: center; gap: 18px; padding: 20px 22px; border-radius: 18px;
+  background: var(--panel-solid); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+.profile .avatar { width: 58px; height: 58px; font-size: 20px; }
+.profile h2 { margin: 0 !important; padding: 0 !important; font-size: 1.35rem !important; color: var(--text); }
+.profile .sub { color: var(--muted); font-size: 14px; margin: 2px 0 8px; }
+.profile .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- sidebar menu ---------- */
+.nav-group { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--faint); margin: 14px 0 4px 6px; }
+[class*="st-key-nav_"] button { justify-content: flex-start !important; border: 0 !important;
+  background: transparent !important; box-shadow: none !important; padding: 6px 10px !important;
+  min-height: 36px !important; color: var(--text-2) !important; border-radius: 10px !important; }
+[class*="st-key-nav_"] button:hover { background: var(--accent-soft) !important; color: var(--accent) !important; }
+[class*="st-key-nav_"] button[kind="primary"] { background: var(--accent-soft) !important;
+  color: var(--accent) !important; font-weight: 600 !important; }
+[class*="st-key-nav_"] button p { font-size: 14px !important; }
+[class*="st-key-nav_"] button > div { justify-content: flex-start !important; width: 100%; gap: 10px; }
+[class*="st-key-nav_"] { margin-bottom: -10px; }
+
+/* inputs: same white field as the dropdowns */
+[data-testid="stTextInputRootElement"], [data-testid="stTextInputRootElement"] input,
+[data-baseweb="input"], [data-baseweb="input"] > div, [data-testid="stDateInputField"] {
+  background: var(--field) !important; }
+[data-baseweb="input"] { border: 1px solid var(--border-strong) !important; border-radius: 8px !important; }
+
+/* Streamlit's own st.metric (used on the customer page) as cards */
+[data-testid="stMetric"] { background: var(--panel-solid); border: 1px solid var(--border);
+  border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow-sm); }
+
+@media (prefers-color-scheme: dark) {
+  .b-green { color: #6ee7b7; } .b-amber { color: #fcd34d; } .b-red { color: #fca5a5; } .b-blue { color: #67e8f9; }
+}
+@media (max-width: 640px) {
+  .block-container { padding-left: 16px !important; padding-right: 16px !important; }
+  .profile { flex-direction: column; align-items: flex-start; }
+}

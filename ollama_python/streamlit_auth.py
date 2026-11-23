@@ -82,17 +82,19 @@ def login_gate():
     """, unsafe_allow_html=True)
 
 
-def user_card(user):
+def user_card(user, admin_link=True):
     """Sidebar block: who is logged in, admin link, log out."""
-    links = []
-    if is_admin(user):
-        links.append(("admin", "Admin dashboard"))
+    initials = "".join(w[0] for w in user.name.split()[:2]).upper() or "?"
     st.markdown(f"""
         <div class="user-card">
-            <div class="user-name">{html.escape(user.name)}</div>
-            <div class="user-email">{html.escape(user.email)}</div>
+            <div class="user-avatar">{html.escape(initials)}</div>
+            <div class="user-meta">
+                <div class="user-name">{html.escape(user.name)}</div>
+                <div class="user-email">{html.escape(user.email)}</div>
+            </div>
         </div>
     """, unsafe_allow_html=True)
-    for target, label in links:
-        st.page_link(f"views/{target}.py", label=label, icon=":material/admin_panel_settings:")
+    if admin_link and is_admin(user):
+        st.page_link("views/admin.py", label="Admin dashboard",
+                     icon=":material/admin_panel_settings:")
     st.markdown(_link(auth_url("/logout"), "Log out", "side-link"), unsafe_allow_html=True)

@@ -55,15 +55,15 @@ def test_admin_dashboard_sections_render(env, monkeypatch):
     assert "Admin dashboard" in _page_links(at)
     at.switch_page("views/admin.py").run()
     assert not at.exception, at.exception
-    assert any(m.label == "Total customers" and m.value == "2" for m in at.metric)
-    for section in ["Customers", "Login events", "Security events", "Audit log", "AI usage",
-                    "Subscriptions", "Settings"]:
-        at.sidebar.radio[0].set_value(section).run()
-        assert not at.exception, (section, at.exception)
+    assert "Total customers" in _text(at) and "kpi-value" in _text(at)
+    for key in ["customers", "active", "pending", "suspended", "logins", "security", "audit",
+                "usage", "plans", "settings", "overview"]:
+        at.button(key=f"nav_{key}").click().run()
+        assert not at.exception, (key, at.exception)
     with session_scope() as db:
         uid = db.scalar(select(User.id).where(User.email == "someone@example.com"))
     at.query_params["user"] = str(uid)
     at.run()
     assert not at.exception, at.exception
-    assert any(t.value == "someone" for t in at.title)
+    assert "someone@example.com" in _text(at) and "Suspend" in [b.label for b in at.button]
     assert "argon2" not in str(at).lower()
