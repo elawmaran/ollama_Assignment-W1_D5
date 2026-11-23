@@ -139,6 +139,8 @@ class UsageEvent(Base):
     model: Mapped[str] = mapped_column(String(100))
     provider: Mapped[str] = mapped_column(String(30), index=True)
     feature: Mapped[str] = mapped_column(String(30), default="chat")
+    # Guests have no user_id: a hashed IP address lets daily limits apply to them too.
+    client_key: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     estimated_cost: Mapped[float] = mapped_column(Float, default=0.0)  # USD

@@ -12,7 +12,7 @@ import streamlit as st
 
 import streamlit_auth
 import ui_theme
-from elaw_core import usage
+from elaw_core import ollama_runtime, usage
 from elaw_core.db import session_scope
 
 # ---------------- CONFIG ----------------
@@ -117,10 +117,9 @@ def warm_up(model_name):
     threading.Thread(target=_load, daemon=True).start()
 
 
-@st.cache_resource
 def generation_slots():
-    """Shared by every visitor: limits how many answers run at the same time."""
-    return threading.Semaphore(MAX_CONCURRENT)
+    """Shared by every visitor AND every feature (Chat, Prompt Builder): one CPU queue."""
+    return ollama_runtime.generation_slots()
 
 
 def safe_md(text, role):
@@ -191,6 +190,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     streamlit_auth.user_card(user)
 
+    st.page_link("views/prompt_builder.py", label="Prompt Builder  ✨ New",
+                 icon=":material/auto_fix_high:")
     if st.button("New chat", key="new_chat", icon=":material/add:", width="stretch"):
         st.session_state.messages = []
         st.rerun()
@@ -284,6 +285,13 @@ if not st.session_state.messages:
             </div>
         </div>
     """, unsafe_allow_html=True)
+
+    with st.container(key="pb_promo"):
+        st.markdown('<div class="pb-promo-text"><b>✨ New: Prompt Builder</b><br>Tell us what you '
+                    'want in your own words. ELAW AI turns it into an AI-ready prompt.</div>',
+                    unsafe_allow_html=True)
+        st.page_link("views/prompt_builder.py", label="Build a prompt",
+                     icon=":material/arrow_forward:")
 
     grid = st.container(key="suggest_grid", horizontal=True, gap="small")
     for i, (title, subtitle, prompt_text) in enumerate(SUGGESTIONS):

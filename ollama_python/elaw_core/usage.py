@@ -62,11 +62,12 @@ def credits_for(input_tokens, output_tokens):
     return math.ceil((input_tokens + output_tokens) / TOKENS_PER_CREDIT)
 
 
-def record_usage(db, user_id, model, provider, input_tokens, output_tokens, feature="chat"):
+def record_usage(db, user_id, model, provider, input_tokens, output_tokens, feature="chat",
+                 client_key=None):
     input_tokens, output_tokens = int(input_tokens or 0), int(output_tokens or 0)
     event = UsageEvent(
         user_id=user_id, request_id=str(uuid.uuid4()), model=model[:100], provider=provider,
-        feature=feature, input_tokens=input_tokens, output_tokens=output_tokens,
+        feature=feature, client_key=client_key, input_tokens=input_tokens, output_tokens=output_tokens,
         estimated_cost=estimate_cost(provider, input_tokens, output_tokens),
         credits_used=credits_for(input_tokens, output_tokens))
     db.add(event)

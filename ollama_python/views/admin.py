@@ -636,6 +636,17 @@ def ai_usage():
         bar_chart(daily(data["ai_usage_daily"], 30), ["count"], ["AI requests"], [SERIES_1],
                   "No chats yet. Usage appears here after the first answer", "auto_awesome")
     with st.container(border=True):
+        st.markdown('<div class="panel-title">By feature</div>', unsafe_allow_html=True)
+        names = {"chat": "Chat", "deep_thinking": "Chat (deep thinking)",
+                 "prompt_builder": "Prompt Builder"}
+        if data["feature_usage"]:
+            st.dataframe(pd.DataFrame([{"Feature": names.get(f["feature"], f["feature"]),
+                                        "Requests": f["requests"], "Credits": f["credits"]}
+                                       for f in data["feature_usage"]]),
+                         hide_index=True, width="stretch")
+        else:
+            empty("apps", "No usage yet")
+    with st.container(border=True):
         st.markdown('<div class="panel-title">By model</div>', unsafe_allow_html=True)
         if data["model_usage"]:
             st.dataframe(pd.DataFrame([{"Model": m["model"], "Provider": m["provider"].title(),

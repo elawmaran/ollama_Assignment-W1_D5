@@ -72,6 +72,18 @@ docker compose up -d --build              # migrations run automatically in elaw
 
 Database backup: `docker exec elaw-db pg_dump -U elaw elaw | gzip > /root/elaw-$(date +%F).sql.gz`
 
+## Rollback
+
+```bash
+cd /opt/elaw-ai && git log --oneline -5           # pick the last good commit
+git checkout <good-commit> -- ollama_python && cd ollama_python
+docker compose up -d --build                      # rebuild that version
+# Database changes are additive (new nullable columns). To undo one anyway:
+docker exec elaw-auth alembic downgrade <previous-revision>   # e.g. 0001
+```
+Prompt Builder only (keep everything else): set `GUEST_DAILY_LIMIT=0` and `FREE_DAILY_LIMIT=0`
+in `.env`, then `docker compose up -d elaw-ai`. Every build is then refused politely.
+
 ## Settings (environment variables)
 
 | Variable | Live value | Meaning |
@@ -84,6 +96,7 @@ Database backup: `docker exec elaw-db pg_dump -U elaw elaw | gzip > /root/elaw-$
 | `ALLOWED_MODELS` | `qwen3:4b-instruct` | models visitors can pick (hides travel-crm's model) |
 | `MAX_CONCURRENT` | `1` | one answer at a time; others see "You're next in line…" |
 | `COST_MODE` | `free` | paid AI providers are refused; AI cost stays $0 |
+| Prompt Builder limits | `GUEST_DAILY_LIMIT=5`, `FREE_DAILY_LIMIT=20` (defaults) | see `PROMPT_BUILDER.md` |
 | Auth settings | in `.env` | `POSTGRES_PASSWORD`, `SMTP_*`, etc.; see `.env.example` and `AUTH_ARCHITECTURE.md` |
 
 ## Useful commands

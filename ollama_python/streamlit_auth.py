@@ -64,11 +64,21 @@ def _link(href, label, cls):
 
 
 def login_gate():
-    st.markdown(f"""
+    st.markdown("""
         <div class="hero">
             <div class="orb">✦</div>
             <h1>ELAW AI.<br><span class="serif">Free and open.</span></h1>
             <p class="lead">Open-source AI on my own server. Create a free account to start chatting.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    with st.container(key="pb_promo"):
+        st.markdown('<div class="pb-promo-text"><b>✨ New: Prompt Builder</b><br>Tell us what you '
+                    'want in your own words. ELAW AI turns it into an AI-ready prompt. '
+                    '<b>No account needed.</b></div>', unsafe_allow_html=True)
+        st.page_link("views/prompt_builder.py", label="Try Prompt Builder free",
+                     icon=":material/arrow_forward:")
+    st.markdown(f"""
+        <div class="hero" style="animation:none">
             <div class="gate-actions">
                 {_link(auth_url('/login'), 'Log in', 'gate-btn primary')}
                 {_link(auth_url('/register'), 'Create free account', 'gate-btn')}

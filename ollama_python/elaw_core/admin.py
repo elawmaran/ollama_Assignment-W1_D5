@@ -410,6 +410,11 @@ def overview(db, actor, days=30):
         "ai_usage_daily": _daily(db, select(d_usage, func.count(UsageEvent.id))
                                  .where(UsageEvent.created_at >= since)
                                  .group_by(d_usage).order_by(d_usage)),
+        "feature_usage": [{"feature": f, "requests": n, "credits": c}
+                          for f, n, c in db.execute(
+                              select(UsageEvent.feature, func.count(UsageEvent.id),
+                                     func.coalesce(func.sum(UsageEvent.credits_used), 0))
+                              .group_by(UsageEvent.feature)).all()],
         "model_usage": [{"model": m, "provider": p, "requests": n, "credits": c}
                         for m, p, n, c in db.execute(
                             select(UsageEvent.model, UsageEvent.provider,

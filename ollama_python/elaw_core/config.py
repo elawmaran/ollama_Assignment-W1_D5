@@ -80,6 +80,21 @@ class Settings:
     # Cost: "free" blocks every paid AI provider (OpenAI etc.). Default and recommended.
     cost_mode: str = field(default_factory=lambda: os.getenv("COST_MODE", "free").lower())
 
+    # Ollama (shared by Chat and Prompt Builder; one CPU, so answers queue)
+    max_concurrent: int = field(default_factory=lambda: _int("MAX_CONCURRENT", 1))
+
+    # Prompt Builder. All its limits live here; change them with env vars.
+    prompt_builder_model: str = field(default_factory=lambda: os.getenv(
+        "PROMPT_BUILDER_MODEL", os.getenv("DEFAULT_MODEL", "qwen3:4b-instruct")))
+    guest_daily_limit: int = field(default_factory=lambda: _int("GUEST_DAILY_LIMIT", 5))
+    free_daily_limit: int = field(default_factory=lambda: _int("FREE_DAILY_LIMIT", 20))
+    admin_daily_limit: int = field(default_factory=lambda: _int("ADMIN_DAILY_LIMIT", 200))
+    pb_per_minute: int = field(default_factory=lambda: _int("PROMPT_BUILDER_PER_MINUTE", 4))
+    pb_max_input_chars: int = field(default_factory=lambda: _int("PROMPT_BUILDER_MAX_INPUT", 1000))
+    pb_max_output_tokens: int = field(default_factory=lambda: _int("PROMPT_BUILDER_MAX_TOKENS", 900))
+    pb_timeout_s: int = field(default_factory=lambda: _int("PROMPT_BUILDER_TIMEOUT", 150))
+    pb_queue_wait_s: int = field(default_factory=lambda: _int("PROMPT_BUILDER_QUEUE_WAIT", 90))
+
     @property
     def is_production(self):
         return self.app_env == "production"
