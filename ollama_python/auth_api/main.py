@@ -46,8 +46,9 @@ async def security_middleware(request: Request, call_next):
     s = config.settings
     # Reject cross-site writes outright (CSRF defence in depth, next to the token).
     if request.method in UNSAFE:
+        # "null" is sent by privacy settings/extensions; the CSRF token still decides then.
         origin = request.headers.get("origin")
-        if origin and origin.rstrip("/") not in _allowed_origins(request):
+        if origin and origin != "null" and origin.rstrip("/") not in _allowed_origins(request):
             return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
 
     response = await call_next(request)
@@ -55,7 +56,9 @@ async def security_middleware(request: Request, call_next):
     h = response.headers
     h["X-Content-Type-Options"] = "nosniff"
     h["X-Frame-Options"] = "DENY"
-    h["Referrer-Policy"] = "no-referrer"  # tokens in URLs must never leak via Referer
+    # same-origin: tokens in URLs never leak to other sites, and the browser still sends
+    # our own Origin on form posts (no-referrer made it send "Origin: null").
+    h["Referrer-Policy"] = "same-origin"
     h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     h["Content-Security-Policy"] = ("default-src 'self'; style-src 'self'; script-src 'self'; "
                                     "img-src 'self' data:; form-action 'self'; "

@@ -105,10 +105,11 @@ is `migrations/versions/0001_auth_admin_usage_tables.py`.
 - **Cookies:** the session cookie is HttpOnly, Secure (production) and SameSite=Lax.
 - **CSRF:** every POST/PATCH needs a double-submit token, either as the `csrf_token` form
   field or the `X-CSRF-Token` header, matching the `elaw_csrf` cookie. On top of that, a
-  request whose Origin header is cross-site is rejected.
+  request whose Origin header names another site is rejected. A `null` Origin, which some
+  browsers and privacy tools send, falls back to the token check.
 - **CORS:** off by default. Only `ALLOWED_ORIGINS` are allowed.
 - **Headers:** strict CSP (no inline scripts), `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer` (so tokens in URLs never leak), nosniff, HSTS, and
+  `Referrer-Policy: same-origin` (so tokens in URLs never leak to other sites), nosniff, HSTS, and
   `Cache-Control: no-store`.
 - **Rate limits:** login 20 per 5 minutes per IP, plus the per-email lockout. Register 5
   per hour per IP. Forgot password and resend verification 3 per 15 minutes per email and

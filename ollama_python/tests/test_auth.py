@@ -271,9 +271,21 @@ def test_cross_site_origin_blocked(client):
     assert r.status_code == 403
 
 
+def test_null_origin_form_post_uses_csrf_token(client):
+    """Browsers can send 'Origin: null' on same-site forms: the token decides, not a 403."""
+    make_user(client)
+    r = client.post("/login", headers={"Origin": "null"}, follow_redirects=False,
+                    data={"email": "alice@example.com", "password": PASSWORD,
+                          "csrf_token": client.csrf})
+    assert r.status_code == 303
+    r = client.post("/login", headers={"Origin": "null"},
+                    data={"email": "alice@example.com", "password": PASSWORD})
+    assert r.status_code == 403  # still blocked without the CSRF token
+
+
 def test_security_headers(client):
     h = client.get("/login").headers
-    assert h["x-frame-options"] == "DENY" and h["referrer-policy"] == "no-referrer"
+    assert h["x-frame-options"] == "DENY" and h["referrer-policy"] == "same-origin"
     assert "frame-ancestors 'none'" in h["content-security-policy"]
 
 
