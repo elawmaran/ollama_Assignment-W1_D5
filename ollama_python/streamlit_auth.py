@@ -16,6 +16,11 @@ def auth_url(path):
     return f"{config.settings.public_url}{path}"
 
 
+def app_url(path):
+    """Pages of the chat app itself (same origin as the auth pages in production)."""
+    return f"{config.settings.app_url}{path}"
+
+
 def current_user():
     """The logged-in ACTIVE, verified user, or None. Re-checked every run, so a
     suspension, logout or role change takes effect on the user's next click."""
@@ -63,6 +68,31 @@ def _link(href, label, cls):
     return f'<a class="{cls}" href="{html.escape(href)}" target="_self">{label}</a>'
 
 
+def prompt_builder_promo(note=""):
+    """Highlighted card linking to Prompt Builder (chat home + welcome page). Plain HTML,
+    so it lays out cleanly on every screen size."""
+    extra = f" <b>{html.escape(note)}</b>" if note else ""
+    st.markdown(f"""
+        <div class="pb-promo">
+            <div class="pb-promo-icon">auto_fix_high</div>
+            <div class="pb-promo-body">
+                <div class="pb-promo-title">Prompt Builder <span class="pb-new">✨ New</span></div>
+                <div class="pb-promo-text">Tell us what you want in your own words. ELAW AI turns it
+                into an AI-ready prompt.{extra}</div>
+            </div>
+            <a class="pb-promo-btn" href="{html.escape(app_url('/prompt-builder'))}" target="_self">
+                <span class="mi">arrow_forward</span>Build a prompt</a>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def logout_button():
+    """Always-visible "Log out" pill in the top-right corner, next to the theme toggle."""
+    st.markdown(f'<a class="top-logout" href="{html.escape(auth_url("/logout"))}" target="_self" '
+                'title="Log out" aria-label="Log out"><span class="mi">logout</span>'
+                '<span class="lbl">Log out</span></a>', unsafe_allow_html=True)
+
+
 def login_gate():
     st.markdown("""
         <div class="hero">
@@ -71,12 +101,7 @@ def login_gate():
             <p class="lead">Open-source AI on my own server. Create a free account to start chatting.</p>
         </div>
     """, unsafe_allow_html=True)
-    with st.container(key="pb_promo"):
-        st.markdown('<div class="pb-promo-text"><b>✨ New: Prompt Builder</b><br>Tell us what you '
-                    'want in your own words. ELAW AI turns it into an AI-ready prompt. '
-                    '<b>No account needed.</b></div>', unsafe_allow_html=True)
-        st.page_link("views/prompt_builder.py", label="Try Prompt Builder free",
-                     icon=":material/arrow_forward:")
+    prompt_builder_promo("No account needed.")
     st.markdown(f"""
         <div class="hero" style="animation:none">
             <div class="gate-actions">
@@ -107,4 +132,5 @@ def user_card(user, admin_link=True):
     if admin_link and is_admin(user):
         st.page_link("views/admin.py", label="Admin dashboard",
                      icon=":material/admin_panel_settings:")
-    st.markdown(_link(auth_url("/logout"), "Log out", "side-link"), unsafe_allow_html=True)
+    st.markdown(f'<a class="side-logout" href="{html.escape(auth_url("/logout"))}" target="_self">'
+                '<span class="mi">logout</span>Log out</a>', unsafe_allow_html=True)

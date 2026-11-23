@@ -34,6 +34,8 @@ if user is None:
                            default=True), prompt_builder], position="hidden").run()
     st.stop()
 
+streamlit_auth.logout_button()  # top-right, on every page for logged-in users
+
 pages = [st.Page("views/chat.py", title="Chat", icon=":material/chat:", default=True),
          prompt_builder]
 if streamlit_auth.is_admin(user):  # admins only; the admin page re-checks on the server too

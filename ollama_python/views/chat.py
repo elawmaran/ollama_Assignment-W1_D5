@@ -286,12 +286,7 @@ if not st.session_state.messages:
         </div>
     """, unsafe_allow_html=True)
 
-    with st.container(key="pb_promo"):
-        st.markdown('<div class="pb-promo-text"><b>✨ New: Prompt Builder</b><br>Tell us what you '
-                    'want in your own words. ELAW AI turns it into an AI-ready prompt.</div>',
-                    unsafe_allow_html=True)
-        st.page_link("views/prompt_builder.py", label="Build a prompt",
-                     icon=":material/arrow_forward:")
+    streamlit_auth.prompt_builder_promo()
 
     grid = st.container(key="suggest_grid", horizontal=True, gap="small")
     for i, (title, subtitle, prompt_text) in enumerate(SUGGESTIONS):
