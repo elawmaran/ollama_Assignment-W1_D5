@@ -184,3 +184,7 @@ cython_debug/
 
 # ELAW AI local data (SQLite dev database)
 ollama_python/data/
+
+# Any copy of an env file holds secrets (keep the template)
+.env.*
+!.env.example
