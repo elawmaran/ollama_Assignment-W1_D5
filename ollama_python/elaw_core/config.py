@@ -99,6 +99,13 @@ class Settings:
     def is_production(self):
         return self.app_env == "production"
 
+    @property
+    def same_origin(self):
+        """Auth pages and the app share one domain (production). Links between them can
+        then be relative, so the site works on every domain that points at it (for
+        example ai. and llm. during a domain move). Emails still use PUBLIC_URL."""
+        return self.public_url == self.app_url
+
 
 settings = Settings()
 

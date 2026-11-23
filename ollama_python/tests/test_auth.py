@@ -262,7 +262,7 @@ def test_html_login_flow_and_csrf(client):
                                     "csrf_token": client.csrf, "next": "//evil.com"},
                     follow_redirects=False)
     assert r.status_code == 303  # open redirect blocked: always our own app
-    assert r.headers["location"] == "http://testserver/"
+    assert r.headers["location"] == "/"
 
 
 def test_cross_site_origin_blocked(client):
@@ -294,3 +294,20 @@ def test_html_escapes_user_input(client):
                                        "password": "a", "confirm_password": "a",
                                        "csrf_token": client.csrf})
     assert "<script>x</script>" not in r.text and "&lt;b&gt;" in r.text
+
+
+def test_redirect_and_links_follow_the_domain_setup(client, monkeypatch):
+    """One domain (production): relative, so ai. and llm. both work. Split dev setup: absolute."""
+    import streamlit_auth
+    from elaw_core import config
+    assert config.settings.same_origin
+    assert streamlit_auth.auth_url("/login") == "/login" and streamlit_auth.app_url("/x") == "/x"
+    monkeypatch.setenv("PUBLIC_URL", "http://localhost:8000")
+    monkeypatch.setenv("APP_URL", "http://localhost:8501")
+    config.reload_settings()
+    make_user(client)
+    r = client.post("/login", data={"email": "alice@example.com", "password": PASSWORD,
+                                    "csrf_token": client.csrf, "next": "/admin"},
+                    follow_redirects=False)
+    assert r.headers["location"] == "http://localhost:8501/admin"
+    assert streamlit_auth.auth_url("/login") == "http://localhost:8000/login"

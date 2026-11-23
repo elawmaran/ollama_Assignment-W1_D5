@@ -7,8 +7,8 @@ name: elaw
 
 x-app-env: &app-env
   APP_ENV: production
-  PUBLIC_URL: https://llm.elawmaran.tech
-  APP_URL: https://llm.elawmaran.tech
+  PUBLIC_URL: https://ai.elawmaran.tech   # main domain; email links use it
+  APP_URL: https://ai.elawmaran.tech      # llm.elawmaran.tech also works (links are relative)
   SECURE_COOKIES: "true"
   TRUST_PROXY: "true"
   DATABASE_URL: postgresql+psycopg://elaw:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@elaw-db:5432/elaw

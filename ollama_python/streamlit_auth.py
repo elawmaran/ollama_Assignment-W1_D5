@@ -12,13 +12,15 @@ from elaw_core.db import session_scope
 
 
 def auth_url(path):
-    """Auth pages live on the auth service (same origin in production)."""
-    return f"{config.settings.public_url}{path}"
+    """Auth pages: relative on a single domain (production), else PUBLIC_URL."""
+    s = config.settings
+    return path if s.same_origin else f"{s.public_url}{path}"
 
 
 def app_url(path):
-    """Pages of the chat app itself (same origin as the auth pages in production)."""
-    return f"{config.settings.app_url}{path}"
+    """Pages of the chat app: relative on a single domain (production), else APP_URL."""
+    s = config.settings
+    return path if s.same_origin else f"{s.app_url}{path}"
 
 
 def current_user():

@@ -422,8 +422,10 @@ def _redirect(url):
 
 
 def _to_app(path):
-    """Into the chat app (a fixed, configured origin, so no open redirect)."""
-    return _redirect(f"{config.settings.app_url}{_safe_next(path)}")
+    """Into the chat app: same domain (relative) in production, else the configured
+    APP_URL. Never an outside site, so no open redirect."""
+    s = config.settings
+    return _redirect(_safe_next(path) if s.same_origin else f"{s.app_url}{_safe_next(path)}")
 
 
 @app.get("/")

@@ -7,7 +7,7 @@ mailbox you configure, and it only sends verification and password-reset emails.
 ## Components
 
 ```
-Browser ──► Caddy (llm.elawmaran.tech, HTTPS)
+Browser ──► Caddy (ai.elawmaran.tech; llm.elawmaran.tech too until retired; HTTPS)
              ├─ /login /register /verify-email /resend-verification
              │  /forgot-password /reset-password /logout /auth-assets/*  ─┐
              ├─ /api/auth/*  /api/admin/*                                 ├─► elaw-auth (FastAPI, :8000)
@@ -144,7 +144,8 @@ current terms, because they can change.
 
 See `.env.example` for the full list. The ones that matter in production:
 - `APP_ENV=production`
-- `PUBLIC_URL` and `APP_URL`, both `https://llm.elawmaran.tech`
+- `PUBLIC_URL` and `APP_URL`, both `https://ai.elawmaran.tech`. When they are equal, links between
+  the auth pages and the app are relative, so any domain pointing at the server works.
 - `SECURE_COOKIES=true` and `TRUST_PROXY=true`
 - `DATABASE_URL`, built by compose from `POSTGRES_PASSWORD`
 - `EMAIL_PROVIDER=smtp` and the `SMTP_*` settings
