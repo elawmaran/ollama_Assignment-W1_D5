@@ -1,0 +1,25 @@
+# Used by docker-compose.standalone.yml. {$DOMAIN} comes from .env (e.g. ai.elawmaran.tech).
+# Caddy gets and renews the HTTPS certificate automatically once DNS points here.
+
+{$DOMAIN} {
+	encode gzip
+	@auth path /api/* /login /register /verify-email /resend-verification /forgot-password /reset-password /logout /auth-assets/*
+	handle @auth {
+		reverse_proxy elaw-auth:8000
+	}
+	handle {
+		reverse_proxy elaw-ai:8501 {
+			flush_interval -1
+		}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}
+
+# Plain-IP access goes to the domain.
+http:// {
+	redir https://{$DOMAIN}{uri} 302
+}

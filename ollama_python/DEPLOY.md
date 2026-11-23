@@ -86,6 +86,18 @@ docker exec elaw-auth alembic downgrade <previous-revision>   # e.g. 0001
 Prompt Builder only (keep everything else): set `GUEST_DAILY_LIMIT=0` and `FREE_DAILY_LIMIT=0`
 in `.env`, then `docker compose up -d elaw-ai`. Every build is then refused politely.
 
+## Backups
+
+- **Nightly, automatic:** `/etc/cron.d/elaw-backup` runs `deploy/backup-db.sh` at 03:30 UTC
+  (after travel-crm's 03:00 demo reset). It writes a verified, compressed dump to
+  `/root/elaw-backups/elaw-db-YYYYMMDD-HHMM.sql.gz` and keeps 14 days. Log: `/var/log/elaw-backup.log`.
+- **Copy to your Mac:** run `deploy/pull-backups.sh` on the Mac. It copies new dumps into
+  `~/elaw-backups/` and skips ones it already has.
+- **Restore:** `deploy/restore-db.sh <file.sql.gz> docker-compose.yml`. This replaces all ELAW
+  data, and asks you to type RESTORE first.
+- **New server:** see `MIGRATE.md`. `docker-compose.standalone.yml` brings its own Caddy, Ollama
+  and database.
+
 ## Settings (environment variables)
 
 | Variable | Live value | Meaning |

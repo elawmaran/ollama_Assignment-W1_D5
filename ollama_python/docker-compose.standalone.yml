@@ -1,0 +1,102 @@
+# ELAW AI on ANY new server, self-contained: its own web server (Caddy, automatic HTTPS),
+# AI engine (Ollama), database, auth service and chat app. Step-by-step guide: MIGRATE.md
+#
+#   cp .env.example .env      # set DOMAIN, POSTGRES_PASSWORD, SMTP_*  (see MIGRATE.md)
+#   docker compose -f docker-compose.standalone.yml up -d --build
+#   docker compose -f docker-compose.standalone.yml exec ollama ollama pull qwen3:4b-instruct
+#
+# (The current production server uses docker-compose.yml instead, which shares the
+#  travel-crm stack's Caddy, Ollama and network.)
+name: elaw
+
+x-app-env: &app-env
+  APP_ENV: production
+  PUBLIC_URL: https://${DOMAIN:?set DOMAIN in .env, e.g. ai.elawmaran.tech}
+  APP_URL: https://${DOMAIN}
+  SECURE_COOKIES: "true"
+  TRUST_PROXY: "true"
+  DATABASE_URL: postgresql+psycopg://elaw:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@elaw-db:5432/elaw
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ELAW AI}
+  EMAIL_DAILY_LIMIT: ${EMAIL_DAILY_LIMIT:-50}
+  COST_MODE: free
+  GUEST_DAILY_LIMIT: ${GUEST_DAILY_LIMIT:-5}
+  FREE_DAILY_LIMIT: ${FREE_DAILY_LIMIT:-20}
+  ADMIN_DAILY_LIMIT: ${ADMIN_DAILY_LIMIT:-200}
+  PROMPT_BUILDER_PER_MINUTE: ${PROMPT_BUILDER_PER_MINUTE:-4}
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile.standalone:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [elaw-ai, elaw-auth]
+
+  ollama:
+    image: ollama/ollama:0.6.8
+    restart: unless-stopped
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+
+  elaw-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: elaw
+      POSTGRES_USER: elaw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=30",
+              "-c", "work_mem=2MB", "-c", "maintenance_work_mem=16MB"]
+    volumes:
+      - elaw-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elaw -d elaw"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+
+  elaw-auth:
+    build: .
+    image: elaw-ai:latest
+    restart: unless-stopped
+    depends_on:
+      elaw-db: {condition: service_healthy}
+    environment: *app-env
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn auth_api.main:app --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips='*'"]
+    mem_limit: 256m
+
+  elaw-ai:
+    image: elaw-ai:latest
+    restart: unless-stopped
+    depends_on:
+      elaw-auth: {condition: service_started}
+      ollama: {condition: service_started}
+    environment:
+      <<: *app-env
+      OLLAMA_HOST: http://ollama:11434
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-qwen3:4b-instruct}
+      ALLOWED_MODELS: ${DEFAULT_MODEL:-qwen3:4b-instruct}
+      MAX_CONCURRENT: "1"
+    mem_limit: 768m
+
+volumes:
+  elaw-db-data:
+  ollama_models:
+  caddy_data:
+  caddy_config:
