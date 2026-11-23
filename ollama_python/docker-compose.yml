@@ -1,0 +1,81 @@
+# ELAW AI production stack. Joins travel-crm's Docker network so Caddy can reach it
+# and the app can use travel-crm's Ollama. Secrets come from ./.env (never committed).
+#
+#   docker compose up -d --build
+#
+name: elaw
+
+x-app-env: &app-env
+  APP_ENV: production
+  PUBLIC_URL: https://llm.elawmaran.tech
+  APP_URL: https://llm.elawmaran.tech
+  SECURE_COOKIES: "true"
+  TRUST_PROXY: "true"
+  DATABASE_URL: postgresql+psycopg://elaw:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@elaw-db:5432/elaw
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ELAW AI}
+  EMAIL_DAILY_LIMIT: ${EMAIL_DAILY_LIMIT:-400}
+  COST_MODE: free
+
+services:
+  elaw-db:
+    image: postgres:16-alpine
+    container_name: elaw-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: elaw
+      POSTGRES_USER: elaw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # Small footprint: the AI models need most of the server's RAM.
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=30",
+              "-c", "work_mem=2MB", "-c", "maintenance_work_mem=16MB"]
+    volumes:
+      - elaw-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elaw -d elaw"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    networks: [travel-crm]   # not published on any host port
+
+  elaw-auth:
+    build: .
+    image: elaw-ai:latest
+    container_name: elaw-auth
+    restart: unless-stopped
+    depends_on:
+      elaw-db: {condition: service_healthy}
+    environment: *app-env
+    # Apply migrations, then serve. --no-access-log: URLs may carry one-time tokens.
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn auth_api.main:app --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips='*'"]
+    mem_limit: 256m
+    networks: [travel-crm]
+
+  elaw-ai:
+    image: elaw-ai:latest
+    container_name: elaw-ai
+    restart: unless-stopped
+    depends_on:
+      elaw-auth: {condition: service_started}
+    environment:
+      <<: *app-env
+      OLLAMA_HOST: http://ollama:11434
+      DEFAULT_MODEL: qwen3:4b-instruct
+      ALLOWED_MODELS: qwen3:4b-instruct
+      MAX_CONCURRENT: "1"
+    mem_limit: 768m
+    networks: [travel-crm]
+
+volumes:
+  elaw-db-data:
+
+networks:
+  travel-crm:
+    external: true
+    name: travel-crm_default

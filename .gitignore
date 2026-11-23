@@ -181,3 +181,6 @@ cython_debug/
 .cursorindexingignore
 # macOS
 .DS_Store
+
+# ELAW AI local data (SQLite dev database)
+ollama_python/data/

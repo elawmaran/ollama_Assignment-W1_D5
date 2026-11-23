@@ -2,3 +2,7 @@
 __pycache__
 *.pyc
 app_old.py
+.env
+data
+tests
+.pytest_cache

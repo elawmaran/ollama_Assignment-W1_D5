@@ -1,0 +1,18 @@
+# Replace the existing llm.elawmaran.tech block in /opt/travel-crm/Caddyfile with this.
+# Auth pages and APIs go to elaw-auth; everything else (chat, /admin, websockets) to Streamlit.
+llm.elawmaran.tech {
+	encode gzip
+	@auth path /api/* /login /register /verify-email /resend-verification /forgot-password /reset-password /logout /auth-assets/*
+	handle @auth {
+		reverse_proxy elaw-auth:8000
+	}
+	handle {
+		reverse_proxy elaw-ai:8501
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}

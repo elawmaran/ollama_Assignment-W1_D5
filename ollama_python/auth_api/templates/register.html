@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<h1>Create your account</h1>
+<p class="sub">Free forever. We'll send a link to verify your email.</p>
+<form method="post" action="/register" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label>Full name<input type="text" name="name" value="{{ name or '' }}" autocomplete="name" required maxlength="100" autofocus></label>
+  <label>Email<input type="email" name="email" value="{{ email or '' }}" autocomplete="email" required maxlength="254"></label>
+  <label>Password<input type="password" name="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+  <label>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" required maxlength="128"></label>
+  <p class="hint">At least 10 characters, with a letter and a number.</p>
+  <button type="submit">Create account</button>
+</form>
+<div class="links"><a href="/login">Already have an account? Log in</a></div>
+{% endblock %}

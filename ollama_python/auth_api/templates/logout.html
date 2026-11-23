@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Log out{% endblock %}
+{% block content %}
+<h1>Log out?</h1>
+<p class="sub">You'll need your email and password to come back.</p>
+<form method="post" action="/logout">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <button type="submit">Log out</button>
+</form>
+<div class="links"><a href="/">Back to chat</a></div>
+{% endblock %}

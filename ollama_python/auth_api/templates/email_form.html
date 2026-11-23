@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+{% if intro %}<p class="sub">{{ intro }}</p>{% endif %}
+<form method="post" action="{{ action }}" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label>Email<input type="email" name="email" autocomplete="email" required maxlength="254" autofocus></label>
+  <button type="submit">{{ button }}</button>
+</form>
+<div class="links"><a href="/login">Back to log in</a></div>
+{% endblock %}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}{% endblock %} · ELAW AI</title>
+  <link rel="stylesheet" href="/auth-assets/auth.css">
+</head>
+<body>
+  <main class="card">
+    <a class="brand" href="/"><span class="logo">✦</span> ELAW <em>AI</em></a>
+    {% if notice %}<div class="alert {{ notice[0] }}" role="status">{{ notice[1] }}</div>{% endif %}
+    {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <p class="foot">Free, open-source AI on my own server · No paid APIs</p>
+</body>
+</html>

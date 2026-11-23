@@ -11,34 +11,66 @@ its own web server or Ollama:
 Internet ──► travel-crm-caddy-1 (ports 80/443, automatic HTTPS)
                ├─ ai.elawmaran.tech   ──► travel-crm frontend
                ├─ qa.elawmaran.tech   ──► qa-site
-               └─ llm.elawmaran.tech  ──► elaw-ai:8501   (this app, Docker container)
-                                            │
-                                            ▼
-                                travel-crm-ollama-1 (shared Ollama 0.6.8, http://ollama:11434)
-                                  qwen3:4b-instruct  → ELAW AI, always loaded (normal + Deep thinking)
-                                  qwen2.5:3b         → used by travel-crm
+               └─ llm.elawmaran.tech
+                    ├─ /login /register /verify-email /forgot-password /reset-password
+                    │  /resend-verification /logout /auth-assets/* /api/*  ──► elaw-auth:8000 (FastAPI)
+                    └─ everything else (chat, /admin)                       ──► elaw-ai:8501 (Streamlit)
+                                   both ──► elaw-db (PostgreSQL 16, not exposed to the internet)
+                                   elaw-ai ──► travel-crm-ollama-1 (shared Ollama, http://ollama:11434)
+                                                 qwen3:4b-instruct → ELAW AI, always loaded
+                                                 qwen2.5:3b        → used by travel-crm
 ```
 
 | Piece | Where |
 |---|---|
 | Code | `/opt/elaw-ai` (clone of this repo) |
-| Container | `elaw-ai`, network `travel-crm_default`, memory limit 768 MB, restarts automatically |
-| HTTPS / routing | `llm.elawmaran.tech` block in `/opt/travel-crm/Caddyfile` |
+| Secrets | `/opt/elaw-ai/ollama_python/.env` (chmod 600, never committed) |
+| Containers | `elaw-ai` (768 MB), `elaw-auth` (256 MB), `elaw-db` (256 MB), all on network `travel-crm_default`, via `docker-compose.yml` |
+| Database data | Docker volume `elaw_elaw-db-data` |
+| HTTPS / routing | `llm.elawmaran.tech` block in `/opt/travel-crm/Caddyfile` (copy from `deploy/Caddyfile.llm`) |
 | DNS | A record `llm` → 201.18.199.87 |
+
+Auth design: `AUTH_ARCHITECTURE.md`. Admin dashboard: `ADMIN_ARCHITECTURE.md`.
+
+## First-time setup of login + admin (one time)
+
+```bash
+ssh root@201.18.199.87
+free -h                                   # need ~400 MB free for elaw-auth + elaw-db
+cd /opt/elaw-ai && git pull && cd ollama_python
+
+# 1. Secrets
+cp .env.example .env && chmod 600 .env
+#    edit .env: POSTGRES_PASSWORD=<long random>, EMAIL_PROVIDER=smtp, SMTP_* (Gmail App Password)
+#    tip: openssl rand -base64 32   for POSTGRES_PASSWORD
+
+# 2. Replace the old single container with the compose stack
+docker rm -f elaw-ai
+docker compose up -d --build              # elaw-db → elaw-auth (runs migrations) → elaw-ai
+docker compose ps
+
+# 3. Route auth paths in Caddy (zero downtime, see "Caddy notes" below)
+cp /opt/travel-crm/Caddyfile /opt/travel-crm/Caddyfile.bak-$(date +%F)
+#    replace the llm.elawmaran.tech block with deploy/Caddyfile.llm, edit IN PLACE (keep the inode)
+docker cp /opt/travel-crm/Caddyfile travel-crm-caddy-1:/tmp/Caddyfile.new
+docker exec travel-crm-caddy-1 caddy validate --config /tmp/Caddyfile.new --adapter caddyfile
+docker exec -w /etc/caddy travel-crm-caddy-1 caddy reload --config /tmp/Caddyfile.new --adapter caddyfile
+
+# 4. Create your super admin (password is asked, never echoed)
+docker exec -it elaw-auth python -m elaw_core.cli create-admin --email <you> --name "<Your Name>"
+```
+
+Then open https://llm.elawmaran.tech, log in, and use **Admin dashboard** in the sidebar.
 
 ## Update the live app after pushing to GitHub
 
 ```bash
 ssh root@201.18.199.87
-cd /opt/elaw-ai && git pull
-cd ollama_python && docker build -t elaw-ai:latest .
-docker rm -f elaw-ai
-docker run -d --name elaw-ai --restart unless-stopped --network travel-crm_default \
-  -e OLLAMA_HOST=http://ollama:11434 \
-  -e DEFAULT_MODEL=qwen3:4b-instruct \
-  -e ALLOWED_MODELS=qwen3:4b-instruct -e MAX_CONCURRENT=1 \
-  --memory 768m elaw-ai:latest
+cd /opt/elaw-ai && git pull && cd ollama_python
+docker compose up -d --build              # migrations run automatically in elaw-auth
 ```
+
+Database backup: `docker exec elaw-db pg_dump -U elaw elaw | gzip > /root/elaw-$(date +%F).sql.gz`
 
 ## Settings (environment variables)
 
@@ -51,11 +83,14 @@ docker run -d --name elaw-ai --restart unless-stopped --network travel-crm_defau
 | `MAX_ANSWER_TOKENS` | `700` (default) | caps answer length so CPU replies stay quick |
 | `ALLOWED_MODELS` | `qwen3:4b-instruct` | models visitors can pick (hides travel-crm's model) |
 | `MAX_CONCURRENT` | `1` | one answer at a time; others see "You're next in line…" |
+| `COST_MODE` | `free` | paid AI providers are refused; AI cost stays $0 |
+| Auth settings | in `.env` | `POSTGRES_PASSWORD`, `SMTP_*`, etc.; see `.env.example` and `AUTH_ARCHITECTURE.md` |
 
 ## Useful commands
 
 ```bash
-docker logs -f elaw-ai                          # app logs
+docker logs -f elaw-ai                          # chat app logs
+docker logs -f elaw-auth                        # auth logs (paths only, never tokens)
 docker exec travel-crm-ollama-1 ollama ps       # which models are loaded
 free -h                                         # memory
 curl -s -o /dev/null -w "%{http_code}\n" https://llm.elawmaran.tech/_stcore/health

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Choose a new password{% endblock %}
+{% block content %}
+<h1>Choose a new password</h1>
+<p class="sub">You'll be logged out on all devices after the change.</p>
+<form method="post" action="/reset-password" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label>New password<input type="password" name="password" autocomplete="new-password" required minlength="10" maxlength="128" autofocus></label>
+  <label>Confirm new password<input type="password" name="confirm_password" autocomplete="new-password" required maxlength="128"></label>
+  <p class="hint">At least 10 characters, with a letter and a number.</p>
+  <button type="submit">Update password</button>
+</form>
+{% endblock %}
