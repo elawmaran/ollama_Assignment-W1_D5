@@ -34,14 +34,13 @@ The browser never talks to Ollama. Ollama is only reachable on the Docker networ
   "questions": [],
   "readiness_score": 85,
   "final_prompt": "…",
-  "structured_prompt": {"role": "", "task": "", "context": "", "requirements": [],
-                        "output_format": "", "constraints": []},
   "specialized_prompt": "image, video or developer prompt when relevant"
 }
 ```
 
-The code builds the Structured and JSON prompts from this output, so they cost no extra
-model tokens. Only the formats that fit the task are shown:
+The code builds the Structured and JSON prompts from this output (the role and output format
+by task, the requirements from `understood`). They cost no extra model tokens, and they
+can't contain details the model invented. Only the formats that fit the task are shown:
 - Universal, Structured and JSON prompts, always.
 - An Image prompt for image tasks, a Video prompt for video tasks, and a Developer prompt
   for coding tasks.
@@ -62,7 +61,7 @@ rebuilds it at a higher temperature. Each one counts as a build.
 | `ADMIN_DAILY_LIMIT` | 200 | builds per 24h for admins |
 | `PROMPT_BUILDER_PER_MINUTE` | 4 | burst limit per visitor |
 | `PROMPT_BUILDER_MAX_INPUT` | 1000 | maximum request length, in characters |
-| `PROMPT_BUILDER_MAX_TOKENS` | 900 | maximum tokens the model may write per build |
+| `PROMPT_BUILDER_MAX_TOKENS` | 600 | maximum tokens the model may write per build |
 | `PROMPT_BUILDER_TIMEOUT` | 150 | seconds before a build is abandoned |
 | `PROMPT_BUILDER_QUEUE_WAIT` | 90 | seconds to wait while Chat or another build uses the CPU |
 | `PROMPT_BUILDER_MODEL` | `DEFAULT_MODEL` | must be a local Ollama model (paid ones are refused) |

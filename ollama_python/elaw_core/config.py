@@ -91,7 +91,7 @@ class Settings:
     admin_daily_limit: int = field(default_factory=lambda: _int("ADMIN_DAILY_LIMIT", 200))
     pb_per_minute: int = field(default_factory=lambda: _int("PROMPT_BUILDER_PER_MINUTE", 4))
     pb_max_input_chars: int = field(default_factory=lambda: _int("PROMPT_BUILDER_MAX_INPUT", 1000))
-    pb_max_output_tokens: int = field(default_factory=lambda: _int("PROMPT_BUILDER_MAX_TOKENS", 900))
+    pb_max_output_tokens: int = field(default_factory=lambda: _int("PROMPT_BUILDER_MAX_TOKENS", 600))
     pb_timeout_s: int = field(default_factory=lambda: _int("PROMPT_BUILDER_TIMEOUT", 150))
     pb_queue_wait_s: int = field(default_factory=lambda: _int("PROMPT_BUILDER_QUEUE_WAIT", 90))
 

@@ -19,9 +19,6 @@ CLEAR = {
     "missing_information": ["Aspect ratio"], "needs_clarification": False, "questions": [],
     "readiness_score": 85,
     "final_prompt": "Create two images of a futuristic Indian warrior: one standing, one sitting.",
-    "structured_prompt": {"role": "Concept artist", "task": "Two images", "context": "Game",
-                          "requirements": ["Standing pose", "Sitting pose"],
-                          "output_format": "2 images", "constraints": ["Cinematic"]},
     "specialized_prompt": "futuristic Indian warrior, standing, cinematic lighting",
 }
 VAGUE = {**CLEAR, "task_type": "other", "understood": [], "needs_clarification": True,
