@@ -25,6 +25,7 @@ PALETTES = {
         "notice-bg": "rgba(16,185,129,0.07)", "notice-border": "rgba(16,185,129,0.24)",
         "notice-strong": "#047857", "green": "#10b981", "red": "#ef4444",
         "bottom-fade": "rgba(247,246,243,0.96)", "input-bg": "rgba(255,255,255,0.88)",
+        "badge-green": "#047857", "badge-amber": "#b45309", "badge-red": "#b91c1c", "badge-blue": "#0e7490",
     },
     "dark": {
         "bg": "#0b0b10", "glow-1": "rgba(139,92,246,0.17)", "glow-2": "rgba(34,211,238,0.09)",
@@ -45,6 +46,7 @@ PALETTES = {
         "notice-bg": "rgba(52,211,153,0.07)", "notice-border": "rgba(52,211,153,0.22)",
         "notice-strong": "#6ee7b7", "green": "#34d399", "red": "#f87171",
         "bottom-fade": "rgba(11,11,16,0.96)", "input-bg": "rgba(24,24,32,0.88)",
+        "badge-green": "#6ee7b7", "badge-amber": "#fcd34d", "badge-red": "#fca5a5", "badge-blue": "#67e8f9",
     },
 }
 THEME_LABELS = {
@@ -88,6 +90,15 @@ def apply_theme():
     else:
         hidden = "to_dark" if theme == "dark" else "to_light"
         theme_css = palette_vars(theme) + f".st-key-{hidden}{{display:none}}"
+
+    try:
+        native = st.context.theme.type  # Streamlit's own theme, from the visitor's OS
+    except Exception:
+        native = None
+    if theme != "auto" and native and native != theme:
+        # Tables are drawn on a canvas that CSS colours can't reach: flip them to match.
+        theme_css += ('[data-testid="stDataFrame"] canvas{filter:invert(1) hue-rotate(180deg)}'
+                      '[data-testid="stDataFrame"]{border-color:var(--border-strong)!important}')
 
     STYLE = (Path(__file__).parent / "style.css").read_text()
     st.markdown(f"<style>{STYLE}{theme_css}</style>", unsafe_allow_html=True)

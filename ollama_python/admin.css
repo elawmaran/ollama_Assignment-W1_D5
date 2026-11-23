@@ -51,12 +51,12 @@
 .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
   font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap; }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.b-green { background: rgba(16,185,129,.12); color: #047857; }
-.b-amber { background: rgba(245,158,11,.14); color: #b45309; }
-.b-red { background: rgba(239,68,68,.11); color: #b91c1c; }
+.b-green { background: rgba(16,185,129,.12); color: var(--badge-green); }
+.b-amber { background: rgba(245,158,11,.14); color: var(--badge-amber); }
+.b-red { background: rgba(239,68,68,.11); color: var(--badge-red); }
 .b-gray { background: rgba(120,120,130,.14); color: var(--muted); }
 .b-violet { background: var(--accent-soft); color: var(--accent); }
-.b-blue { background: rgba(8,145,178,.12); color: #0e7490; }
+.b-blue { background: rgba(8,145,178,.12); color: var(--badge-blue); }
 
 /* ---------- customer profile header ---------- */
 .profile { display: flex; align-items: center; gap: 18px; padding: 20px 22px; border-radius: 18px;
@@ -89,9 +89,6 @@
 [data-testid="stMetric"] { background: var(--panel-solid); border: 1px solid var(--border);
   border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow-sm); }
 
-@media (prefers-color-scheme: dark) {
-  .b-green { color: #6ee7b7; } .b-amber { color: #fcd34d; } .b-red { color: #fca5a5; } .b-blue { color: #67e8f9; }
-}
 @media (max-width: 640px) {
   .block-container { padding-left: 16px !important; padding-right: 16px !important; }
   .profile { flex-direction: column; align-items: flex-start; }

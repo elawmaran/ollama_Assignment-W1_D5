@@ -435,3 +435,49 @@ button[data-variant="segmented_control"][aria-checked="true"] {
   .st-key-pb_actions button { flex: 1 1 45%; }
   .pb-card { padding: 14px; }
 }
+
+/* ---------- Built-in Streamlit parts follow the site's theme toggle ----------
+   Streamlit colours its own widgets from the visitor's OS setting; the site's
+   Light/Dark switch only changes our tokens. These rules tie them together. */
+.stApp, [data-testid="stMarkdownContainer"], [data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] p, [data-testid="stCheckbox"] label, [data-testid="stSliderThumbValue"],
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 { color: var(--text); }
+.stApp button [data-testid="stMarkdownContainer"], .stApp button [data-testid="stMarkdownContainer"] p,
+.stApp a [data-testid="stMarkdownContainer"] { color: inherit; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--muted) !important; }
+[data-testid="stDateInputField"], [data-testid="stDateInputField"] * { color: var(--muted) !important; }
+[data-testid="stTooltipIcon"], [data-testid="stTooltipHoverTarget"] svg { color: var(--muted) !important; }
+/* page links (sidebar navigation) */
+[data-testid="stPageLink"] a, [data-testid="stPageLink-NavLink"] { border-radius: 10px; }
+[data-testid="stPageLink"] a p, [data-testid="stPageLink"] a span,
+[data-testid="stPageLink-NavLink"] p, [data-testid="stPageLink-NavLink"] span { color: var(--text-2) !important; }
+[data-testid="stPageLink"] a:hover, [data-testid="stPageLink-NavLink"]:hover { background: var(--accent-soft) !important; }
+[data-testid="stPageLink"] a:hover p, [data-testid="stPageLink-NavLink"]:hover p { color: var(--accent) !important; }
+[data-testid="stPageLink-NavLink"][aria-current="page"], [data-testid="stPageLink"] a[aria-current="page"] {
+  background: var(--accent-soft) !important; }
+[data-testid="stPageLink-NavLink"][aria-current="page"] p,
+[data-testid="stPageLink"] a[aria-current="page"] p { color: var(--accent) !important; font-weight: 600; }
+/* text boxes, inputs and dropdowns */
+[data-testid="stTextAreaRootElement"], [data-testid="stTextAreaRootElement"] textarea,
+[data-testid="stTextInputRootElement"], [data-testid="stTextInputRootElement"] input,
+[data-testid="stDateInputField"], [data-testid="stDateInput"] input,
+[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+  background: var(--field) !important; color: var(--text) !important; border-color: var(--border-strong) !important; }
+.stApp textarea::placeholder, .stApp input::placeholder { color: var(--faint) !important; opacity: 1; }
+[data-testid="stTextAreaRootElement"], [data-testid="stTextInputRootElement"] { border: 1px solid var(--border-strong) !important; }
+[data-baseweb="popover"] [role="listbox"], [data-baseweb="popover"] ul, [data-baseweb="calendar"],
+[data-baseweb="calendar"] > div { background: var(--panel-solid) !important; }
+[data-baseweb="popover"] li, [data-baseweb="popover"] [role="option"], [data-baseweb="calendar"] * { color: var(--text) !important; }
+[data-baseweb="popover"] li:hover, [data-baseweb="popover"] [aria-selected="true"] { background: var(--accent-soft) !important; }
+/* tabs, progress, code, panels, dialogs */
+.stApp [data-baseweb="tab"] p { color: var(--text-2); }
+.stApp [data-baseweb="tab"][aria-selected="true"] p { color: var(--accent); }
+[data-baseweb="tab-border"] { background: var(--border) !important; }
+[data-testid="stProgress"] p { color: var(--text-2) !important; }
+[data-testid="stProgressBarTrack"], [data-testid="stProgress"] [role="progressbar"] > div > div { background: var(--track) !important; }
+[data-testid="stCode"] pre, [data-testid="stCode"] code { background: var(--pre-bg) !important; color: var(--text) !important; }
+[data-testid="stCode"] pre { border: 1px solid var(--border); }
+[data-testid="stVerticalBlock"], [data-testid="stLayoutWrapper"] { border-color: var(--border-strong) !important; }
+[role="dialog"] { background: var(--panel-solid) !important; color: var(--text) !important; }
+[role="dialog"] h2, [role="dialog"] p, [role="dialog"] label { color: var(--text) !important; }
+[data-testid="stExpander"] summary p, [data-testid="stStatusWidget"] p { color: var(--text-2); }

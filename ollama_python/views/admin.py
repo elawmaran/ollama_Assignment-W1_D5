@@ -148,8 +148,12 @@ def bar_chart(df, series, labels, colors, empty_text, icon="bar_chart"):
                         legend=alt.Legend(orient="top", title=None) if len(series) > 1 else None),
         tooltip=[alt.Tooltip("yearmonthdate(day):T", title="Day", format="%a %d %b"),
                  alt.Tooltip("series:N", title=""), alt.Tooltip("sum(value):Q", title="Count")],
-    ).properties(height=210)
-    st.altair_chart(chart, use_container_width=True)
+    ).properties(height=210).configure(background="transparent").configure_view(stroke=None).configure_axis(
+        labelColor="#8a8a94", titleColor="#8a8a94", gridColor="rgba(128,128,140,0.18)",
+        domainColor="rgba(128,128,140,0.35)", tickColor="rgba(128,128,140,0.35)",
+        labelFont="Inter, -apple-system, sans-serif").configure_legend(
+        labelColor="#8a8a94", labelFont="Inter, -apple-system, sans-serif")
+    st.altair_chart(chart, use_container_width=True, theme=None)
 
 
 def go(key, **params):

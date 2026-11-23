@@ -211,7 +211,8 @@ elif result:
     tabs = st.tabs([name for name, _ in fmts])
     for tab, (name, text) in zip(tabs, fmts):
         with tab:
-            st.code(text, language="json" if name == "JSON" else None, wrap_lines=True)
+            # Plain text: syntax colours follow the OS theme and clash with the site toggle.
+            st.code(text, language=None, wrap_lines=True)
 
     c1, c2 = st.columns(2)
     with c1:
