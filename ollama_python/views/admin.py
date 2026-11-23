@@ -546,8 +546,15 @@ def actions(p):
 
 
 def instant(fn, user_id, ok_text):
-    _, err = run(fn, user_id, ip=IP)
-    st.session_state.flash = ("error", err) if err else ("success", ok_text)
+    sent, err = run(fn, user_id, ip=IP)
+    if err:
+        st.session_state.flash = ("error", err)
+    elif sent is False:
+        st.session_state.flash = ("error", "The email couldn't be sent. Check Settings → Email "
+                                  "sending, or try again in a few minutes. Their previous link, "
+                                  "if any, still works.")
+    else:
+        st.session_state.flash = ("success", ok_text)
     st.rerun()
 
 

@@ -140,7 +140,7 @@ def require_admin(user=Depends(require_user)):
 
 
 STATUS_FOR = {"rate_limited": 429, "locked": 429, "invalid_login": 401, "unverified": 403,
-              "suspended": 403, "disabled": 403, "duplicate_email": 409}
+              "suspended": 403, "disabled": 403, "duplicate_email": 409, "email_failed": 503}
 
 
 def _api_error(error: auth.AuthError):
@@ -198,8 +198,10 @@ def api_register(body: RegisterIn, request: Request, db=Depends(get_db)):
                                    body.confirm_password, client_info(request))
     except auth.AuthError as e:
         return _api_error(e)
-    return JSONResponse({"detail": "Registration successful. Check your email to verify your "
-                         "account.", "verification_email_sent": sent, "user": _me(user)},
+    detail = ("Registration successful. Check your email to verify your account." if sent else
+              "Your account was created, but we couldn't send the verification email right now. "
+              "Please use “Resend verification email” in a few minutes.")
+    return JSONResponse({"detail": detail, "verification_email_sent": sent, "user": _me(user)},
                         status_code=201)
 
 
@@ -349,7 +351,7 @@ def api_admin_role(user_id: int, body: RoleIn, request: Request,
 def api_admin_resend(user_id: int, request: Request, actor=Depends(require_admin),
                      db=Depends(get_db)):
     sent = _admin_call(admin_svc.resend_verification, db, actor, user_id, client_info(request).ip)
-    return {"sent": sent}
+    return JSONResponse({"sent": sent}, status_code=200 if sent else 502)
 
 
 @app.post("/api/admin/users/{user_id}/password-reset", dependencies=[Depends(require_csrf)])
@@ -357,7 +359,7 @@ def api_admin_reset(user_id: int, request: Request, actor=Depends(require_admin)
                     db=Depends(get_db)):
     sent = _admin_call(admin_svc.trigger_password_reset, db, actor, user_id,
                        client_info(request).ip)
-    return {"sent": sent}
+    return JSONResponse({"sent": sent}, status_code=200 if sent else 502)
 
 
 @app.post("/api/admin/users/{user_id}/force-logout", dependencies=[Depends(require_csrf)])
@@ -501,8 +503,9 @@ async def resend_submit(request: Request, db=Depends(get_db)):
     try:
         auth.resend_verification(db, str(form.get("email", ""))[:254], client_info(request))
     except auth.AuthError as e:
-        return page(request, "email_form.html", 429, title="Resend verification email",
-                    action="/resend-verification", button="Send new link", error=e.message)
+        return page(request, "email_form.html", STATUS_FOR.get(e.code, 400),
+                    title="Resend verification email", action="/resend-verification",
+                    button="Send new link", error=e.message)
     return page(request, "message.html", title="Verification email sent", kind="success",
                 text=GENERIC_SENT, link=("/login", "Back to log in"))
 
@@ -520,8 +523,9 @@ async def forgot_submit(request: Request, db=Depends(get_db)):
     try:
         auth.forgot_password(db, str(form.get("email", ""))[:254], client_info(request))
     except auth.AuthError as e:
-        return page(request, "email_form.html", 429, title="Forgot your password?",
-                    action="/forgot-password", button="Send reset link", error=e.message)
+        return page(request, "email_form.html", STATUS_FOR.get(e.code, 400),
+                    title="Forgot your password?", action="/forgot-password",
+                    button="Send reset link", error=e.message)
     return page(request, "message.html", title="Password reset email sent", kind="success",
                 text=GENERIC_SENT, link=("/login", "Back to log in"))
 

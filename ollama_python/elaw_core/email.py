@@ -13,6 +13,7 @@ import logging
 import smtplib
 import ssl
 import threading
+import time
 from datetime import date
 from email.message import EmailMessage
 from email.utils import formataddr
@@ -23,7 +24,38 @@ log = logging.getLogger("elaw.email")
 
 
 class EmailError(Exception):
-    pass
+    def __init__(self, message, transient=False, code=None):
+        super().__init__(message)
+        self.transient = transient  # worth retrying (timeouts, 4xx "try again later")
+        self.code = code            # SMTP reply code, if the server gave one
+
+
+# Retries for temporary problems only; wrong password or rejected address won't fix itself.
+MAX_ATTEMPTS = 3
+BACKOFF_S = (2, 5)  # wait before attempt 2, attempt 3
+
+
+def mask(address):
+    """a***@gmail.com: enough for support, not the full address in logs."""
+    local, _, domain = (address or "").partition("@")
+    return f"{local[:1]}***@{domain}" if domain else "***"
+
+
+def _classify(error):
+    """Return (transient, smtp_code) for an exception raised while sending."""
+    code = getattr(error, "smtp_code", None)
+    if isinstance(error, smtplib.SMTPRecipientsRefused):
+        codes = [c for c, _ in error.recipients.values()]
+        code = codes[0] if codes else None
+        return bool(code and 400 <= code < 500), code
+    if isinstance(error, smtplib.SMTPAuthenticationError):
+        return False, code
+    if isinstance(error, (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
+                          TimeoutError, ConnectionError)):
+        return True, code
+    if isinstance(error, smtplib.SMTPResponseException):
+        return 400 <= error.smtp_code < 500, code
+    return isinstance(error, OSError), code
 
 
 class SMTPEmailProvider:
@@ -46,18 +78,18 @@ class SMTPEmailProvider:
         context = ssl.create_default_context()
         try:
             if s.smtp_use_ssl or s.smtp_port == 465:
-                with smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, context=context, timeout=20) as smtp:
+                with smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, context=context, timeout=15) as smtp:
                     smtp.login(s.smtp_username, s.smtp_password)
                     smtp.send_message(msg)
             else:
-                with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
+                with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=15) as smtp:
                     smtp.starttls(context=context)
                     smtp.login(s.smtp_username, s.smtp_password)
                     smtp.send_message(msg)
         except (smtplib.SMTPException, OSError) as error:
-            # Log the error type only: never the credentials or the message body (it has tokens).
-            log.error("SMTP send failed: %s", type(error).__name__)
-            raise EmailError("Could not send email") from error
+            transient, code = _classify(error)
+            # Never the credentials or the message body (it contains the one-time link).
+            raise EmailError(f"{type(error).__name__}", transient=transient, code=code) from error
 
 
 class ConsoleEmailProvider:
@@ -97,8 +129,8 @@ class EmailService:
                 raise EmailError("EMAIL_PROVIDER must be 'smtp' in production")
         return self._provider
 
-    def _within_daily_cap(self):
-        """Stay under the free mailbox's daily sending limit (keeps it free, avoids bans)."""
+    def _reserve(self):
+        """Hold one slot of the daily cap (stays under the free mailbox's limit)."""
         with self._lock:
             today = date.today()
             if self._count_day != today:
@@ -108,11 +140,38 @@ class EmailService:
             self._count += 1
             return True
 
-    def send(self, to, subject, text, html_body):
-        if not self._within_daily_cap():
-            log.warning("Daily email cap reached; email not sent")
+    def _release(self):
+        """A failed email gives its slot back: only delivered emails count."""
+        with self._lock:
+            self._count = max(0, self._count - 1)
+
+    def send(self, to, subject, text, html_body, purpose="email"):
+        """Send with retries for temporary failures. Raises EmailError if it can't be sent."""
+        if not self._reserve():
+            log.error("email not sent: daily cap of %s reached (purpose=%s to=%s)",
+                      config.settings.email_daily_limit, purpose, mask(to))
             raise EmailError("Daily email limit reached")
-        self.provider.send(to, subject, text, html_body)
+        try:
+            provider = self.provider
+        except EmailError as error:
+            self._release()
+            log.error("email not sent: %s (purpose=%s to=%s)", error, purpose, mask(to))
+            raise
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                provider.send(to, subject, text, html_body)
+                log.info("email sent (purpose=%s to=%s attempt=%s)", purpose, mask(to), attempt)
+                return
+            except EmailError as error:
+                retry = error.transient and attempt < MAX_ATTEMPTS
+                log.log(logging.WARNING if retry else logging.ERROR,
+                        "email send failed (purpose=%s to=%s attempt=%s/%s error=%s code=%s%s)",
+                        purpose, mask(to), attempt, MAX_ATTEMPTS, error, error.code,
+                        ", retrying" if retry else "")
+                if not retry:
+                    self._release()
+                    raise
+                time.sleep(BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)])
 
     # ---- templates ----
     def _render(self, name, intro, button, link, minutes):
@@ -130,12 +189,12 @@ If you didn't ask for this, you can ignore this email.</p></div>"""
     def send_verification(self, to, name, link, minutes):
         text, body = self._render(name, "Please confirm your email address to start using ELAW AI.",
                                   "Verify my email", link, minutes)
-        self.send(to, "Verify your ELAW AI email", text, body)
+        self.send(to, "Verify your ELAW AI email", text, body, purpose="verification")
 
     def send_password_reset(self, to, name, link, minutes):
         text, body = self._render(name, "Someone (hopefully you) asked to reset your ELAW AI password.",
                                   "Choose a new password", link, minutes)
-        self.send(to, "Reset your ELAW AI password", text, body)
+        self.send(to, "Reset your ELAW AI password", text, body, purpose="password_reset")
 
 
 email_service = EmailService()

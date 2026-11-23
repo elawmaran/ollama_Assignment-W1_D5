@@ -39,6 +39,7 @@ MESSAGES = {
     "invalid_token": "This link is invalid. Please request a new one.",
     "expired_token": "This link has expired. Please request a new one.",
     "used_token": "This link has already been used.",
+    "email_failed": "We couldn't send the email right now. Please try again in a few minutes.",
 }
 
 
@@ -48,14 +49,32 @@ def _err(code):
 
 # ---------------- TOKENS ----------------
 def _create_token(db, model, user, minutes):
-    # Only one live token per user: older unused ones stop working.
-    db.execute(update(model).where(model.user_id == user.id, model.used_at.is_(None))
-               .values(used_at=utcnow()))
     raw, digest = security.new_token()
-    db.add(model(user_id=user.id, token_hash=digest,
-                 expires_at=utcnow() + timedelta(minutes=minutes)))
+    token = model(user_id=user.id, token_hash=digest,
+                  expires_at=utcnow() + timedelta(minutes=minutes))
+    db.add(token)
     db.flush()
-    return raw
+    return raw, token
+
+
+def _send_with_token(db, model, user, minutes, path, send, purpose):
+    """Create a link, email it, and only then retire the user's older links.
+
+    If the email can't be sent, the new (undelivered) token is discarded, so a link
+    the user already received keeps working. Returns True only if the email was sent.
+    """
+    raw, token = _create_token(db, model, user, minutes)
+    try:
+        send(user.email, user.name, f"{config.settings.public_url}{path}?token={raw}", minutes)
+    except EmailError as error:
+        db.delete(token)
+        db.flush()
+        log.error("%s email for user %s was not delivered: %s", purpose, user.id, error)
+        return False
+    # Delivered: now this is the only live link.
+    db.execute(update(model).where(model.user_id == user.id, model.used_at.is_(None),
+                                   model.id != token.id).values(used_at=utcnow()))
+    return True
 
 
 def _consume_token(db, model, raw, consume=True):
@@ -74,25 +93,15 @@ def _consume_token(db, model, raw, consume=True):
 
 
 def send_verification_email(db, user):
-    s = config.settings
-    raw = _create_token(db, EmailVerificationToken, user, s.verify_token_minutes)
-    link = f"{s.public_url}/verify-email?token={raw}"
-    try:
-        email_service.send_verification(user.email, user.name, link, s.verify_token_minutes)
-        return True
-    except EmailError:
-        return False
+    return _send_with_token(db, EmailVerificationToken, user,
+                            config.settings.verify_token_minutes, "/verify-email",
+                            email_service.send_verification, "Verification")
 
 
 def send_reset_email(db, user):
-    s = config.settings
-    raw = _create_token(db, PasswordResetToken, user, s.reset_token_minutes)
-    link = f"{s.public_url}/reset-password?token={raw}"
-    try:
-        email_service.send_password_reset(user.email, user.name, link, s.reset_token_minutes)
-        return True
-    except EmailError:
-        return False
+    return _send_with_token(db, PasswordResetToken, user,
+                            config.settings.reset_token_minutes, "/reset-password",
+                            email_service.send_password_reset, "Password reset")
 
 
 # ---------------- REGISTRATION ----------------
@@ -132,7 +141,8 @@ def verify_email(db, raw, client=None):
 
 
 def resend_verification(db, email, client=None):
-    """Always looks the same to the caller, so it can't be used to find accounts."""
+    """Same answer for unknown and known emails (no account discovery). The one exception:
+    if the account exists and the email service fails, say so instead of claiming success."""
     client = client or ClientInfo()
     email = security.normalize_email(email)
     if client.ip and not security.allow("resend_ip", client.ip):
@@ -141,7 +151,8 @@ def resend_verification(db, email, client=None):
         raise _err("rate_limited")
     user = db.scalar(select(User).where(User.email == email))
     if user and not user.email_verified and user.status in (Status.PENDING, Status.ACTIVE):
-        send_verification_email(db, user)
+        if not send_verification_email(db, user):
+            raise _err("email_failed")
 
 
 # ---------------- LOGIN / SESSIONS ----------------
@@ -267,7 +278,8 @@ def revoke_all_sessions(db, user_id):
 
 # ---------------- PASSWORD RESET ----------------
 def forgot_password(db, email, client=None):
-    """Always looks the same to the caller, so it can't be used to find accounts."""
+    """Same answer for unknown and known emails (no account discovery). The one exception:
+    if the account exists and the email service fails, say so instead of claiming success."""
     client = client or ClientInfo()
     email = security.normalize_email(email)
     if client.ip and not security.allow("forgot_ip", client.ip):
@@ -276,7 +288,8 @@ def forgot_password(db, email, client=None):
         raise _err("rate_limited")
     user = db.scalar(select(User).where(User.email == email))
     if user and user.status in (Status.ACTIVE, Status.PENDING):
-        send_reset_email(db, user)
+        if not send_reset_email(db, user):
+            raise _err("email_failed")
 
 
 def check_reset_token(db, raw):
