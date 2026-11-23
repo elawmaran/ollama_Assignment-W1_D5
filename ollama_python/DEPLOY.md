@@ -1,6 +1,6 @@
 # ELAW AI: live deployment
 
-**Live at https://ai.elawmaran.tech** (main domain since 2026-11-23; https://llm.elawmaran.tech serves the same app until it is retired) on the Hostinger KVM 2 VPS (`srv2091969.hstgr.cloud`,
+**Live at https://ai.elawmaran.tech** (since 2026-11-23; the old https://llm.elawmaran.tech permanently redirects here) on the Hostinger KVM 2 VPS (`srv2091969.hstgr.cloud`,
 201.18.199.87; 2 vCPU, 7.8 GB RAM, 4 GB swap).
 
 The server also runs the **travel-crm** Docker stack (`/opt/travel-crm`). Its Caddy, Ollama and Docker network are shared with ELAW AI, so never run
@@ -12,7 +12,8 @@ its own web server or Ollama:
 Internet ──► travel-crm-caddy-1 (ports 80/443, automatic HTTPS)
                ├─ http://<IP>         ──► redirect to https://ai.elawmaran.tech
                ├─ qa.elawmaran.tech   ──► qa-site (DNS now points to GitHub Pages)
-               └─ ai.elawmaran.tech + llm.elawmaran.tech (same routing)
+               ├─ llm.elawmaran.tech  ──► 301 redirect to https://ai.elawmaran.tech{uri} (retired)
+               └─ ai.elawmaran.tech
                     ├─ /login /register /verify-email /forgot-password /reset-password
                     │  /resend-verification /logout /auth-assets/* /api/*  ──► elaw-auth:8000 (FastAPI)
                     └─ everything else (chat, /admin)                       ──► elaw-ai:8501 (Streamlit)
@@ -154,7 +155,7 @@ docker exec travel-crm-caddy-1 caddy validate --config /tmp/Caddyfile.new --adap
 docker exec -w /etc/caddy travel-crm-caddy-1 caddy reload --config /tmp/Caddyfile.new --adapter caddyfile
 ```
 
-**Retire llm. later:** replace `llm.elawmaran.tech { import elaw_app }` with
-`llm.elawmaran.tech { redir https://ai.elawmaran.tech{uri} 301 }`, then reload as above. Old email
-links and bookmarks keep working through the redirect. Keep the redirect for a few months before
-removing the block and the DNS record.
+**llm. retired (2026-11-23):** `llm.elawmaran.tech { redir https://ai.elawmaran.tech{uri} 301 }`.
+Old email links and bookmarks keep working through the redirect. The previous routing is backed up
+at `/root/backup-before-llm-retire-20261123-1219/Caddyfile`. Keep the redirect and the `llm` DNS
+record for a few months (until about Feb 2027). After that, remove the block and the record.

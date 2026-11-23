@@ -1,5 +1,5 @@
 # ELAW AI routing for /opt/travel-crm/Caddyfile (the shared Caddy in the travel-crm stack).
-# ai.elawmaran.tech is the main domain; llm.elawmaran.tech serves the same app until retired.
+# ai.elawmaran.tech is the domain. llm.elawmaran.tech was retired on 2026-11-23 (301 redirect to ai.).
 # Auth pages and APIs go to elaw-auth; everything else (chat, /admin, websockets) to Streamlit.
 
 (elaw_app) {
@@ -24,8 +24,9 @@ ai.elawmaran.tech {
 	import elaw_app
 }
 
+# Retired old domain: permanent redirect keeps old links, bookmarks and emailed tokens working.
 llm.elawmaran.tech {
-	import elaw_app
+	redir https://ai.elawmaran.tech{uri} 301
 }
 
 # Plain-IP access (http://201.18.199.87) goes to the main domain.
