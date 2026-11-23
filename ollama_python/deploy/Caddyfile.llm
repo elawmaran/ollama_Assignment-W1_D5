@@ -7,7 +7,9 @@ llm.elawmaran.tech {
 		reverse_proxy elaw-auth:8000
 	}
 	handle {
-		reverse_proxy elaw-ai:8501
+		reverse_proxy elaw-ai:8501 {
+			flush_interval -1
+		}
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
